@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+﻿import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   Avatar,
   Box,
@@ -18,6 +18,7 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  Paper,
   TextField,
   Typography,
 } from '@mui/material';
@@ -52,6 +53,7 @@ import { useSnackbarStore } from '../stores/snackbarStore';
 import { useTheme } from '@mui/material/styles';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAdminStore } from '../stores/adminStore';
+import { useAppConfigStore } from '../stores/appConfigStore';
 import { storyApi, uploadApi, userApi } from '../lib/api';
 import type { Chat, Story, StoryViewer } from '../lib/types';
 import { isCreatorUser } from '../lib/creator';
@@ -132,6 +134,7 @@ export default function ChatsPage() {
   const chatCompactMode = useSettingsStore((s) => s.chatCompactMode);
   const savedChatHidden = useSettingsStore((s) => s.savedChatHidden);
   const setSavedChatHidden = useSettingsStore((s) => s.setSavedChatHidden);
+  const gameEnabled = useAppConfigStore((s) => s.gameEnabled);
   const navigate = useNavigate();
   const {
     chats,
@@ -151,6 +154,7 @@ export default function ChatsPage() {
   const logout = useAuthStore((s) => s.logout);
   const pushSnackbar = useSnackbarStore((s) => s.push);
   const [q, setQ] = useState('');
+  const deferredQuery = useDeferredValue(q);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [chatActionsAnchor, setChatActionsAnchor] = useState<null | HTMLElement>(null);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
@@ -588,7 +592,7 @@ export default function ChatsPage() {
   };
 
   const visible = useMemo(() => {
-    const needle = q.toLowerCase().trim();
+    const needle = deferredQuery.toLowerCase().trim();
     const base = chats.filter((c) => !c.archived && c.type !== 'ai' && !(savedChatHidden && c.type === 'saved'));
     if (!needle) return base;
 
@@ -598,7 +602,7 @@ export default function ChatsPage() {
       const name = chat.name || contactName || peer?.fullName || peer?.username || '';
       return name.toLowerCase().includes(needle);
     });
-  }, [chats, q, getContactByUserId, user?.id, savedChatHidden]);
+  }, [chats, deferredQuery, getContactByUserId, user?.id, savedChatHidden]);
 
   const selectedChat = useMemo(
     () => (selectedChatId ? chats.find((item) => item.id === selectedChatId) || null : null),
@@ -690,11 +694,19 @@ export default function ChatsPage() {
   };
 
   if (isLoading) {
-    return <Box sx={{ p: 4, display: 'grid', placeItems: 'center' }}><CircularProgress /></Box>;
+    return <Box sx={{ p: 4, display: 'grid', placeItems: 'center', height: '100%' }}><CircularProgress /></Box>;
   }
 
   return (
-    <Box sx={{ p: 1.5, height: '100%', overflow: 'auto', bgcolor: isDark ? 'transparent' : '#FFFFFF' }}>
+    <Box
+      sx={{
+        px: 1.25,
+        pb: 'max(env(safe-area-inset-bottom), 92px)',
+        height: '100%',
+        overflow: 'auto',
+        bgcolor: 'transparent',
+      }}
+    >
       <AppHeader
         title={
           !isOnline ? (
@@ -767,17 +779,49 @@ export default function ChatsPage() {
         }
       />
 
-      <TextField
-        fullWidth
-        size="small"
-        placeholder="Поиск по чатам"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        InputProps={{ startAdornment: <SearchRoundedIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}
-        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 4, bgcolor: isDark ? 'rgba(26,40,56,0.95)' : '#F5F7F8' } }}
-      />
+      <Paper
+        sx={{
+          p: 1,
+          borderRadius: 3.5,
+          bgcolor: isDark ? 'rgba(16, 28, 43, 0.74)' : 'rgba(255,255,255,0.82)',
+        }}
+      >
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Поиск по чатам"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          InputProps={{ startAdornment: <SearchRoundedIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3.5 } }}
+        />
+        <Box sx={{ mt: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'text.secondary' }}>
+            Чаты
+          </Typography>
+          <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+            {visible.length}
+          </Typography>
+        </Box>
+      </Paper>
 
-      <Box sx={{ mt: 1.1, mb: 0.45 }}>
+      <Paper
+        sx={{
+          mt: 1.1,
+          mb: 0.5,
+          p: 0.8,
+          borderRadius: 3.5,
+          bgcolor: isDark ? 'rgba(16, 28, 43, 0.72)' : 'rgba(255,255,255,0.82)',
+        }}
+      >
+        <Box sx={{ px: 0.45, pb: 0.55, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.02em' }}>
+            Статусы
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+            24 часа
+          </Typography>
+        </Box>
         <Box sx={{ display: 'flex', gap: 1.1, overflowX: 'auto', pb: 0.2 }}>
           <ButtonBase
             onClick={() => {
@@ -863,9 +907,9 @@ export default function ChatsPage() {
               </ButtonBase>
             ))}
         </Box>
-      </Box>
+      </Paper>
 
-      <List sx={{ mt: 1 }}>
+      <List sx={{ mt: 1, px: 0.1 }}>
         {visible.map((chat) => {
           const rawChat = chat as Chat & Record<string, any>;
           const rawLastMessage = (rawChat.lastMessage ?? rawChat.last_message) as Record<string, any> | undefined;
@@ -954,22 +998,27 @@ export default function ChatsPage() {
               onPointerLeave={clearHoldTimer}
               onPointerCancel={clearHoldTimer}
               sx={{
-                borderBottom: '1px solid',
-                borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E6EBEF',
                 py: chatCompactMode ? 0.8 : 1.2,
-                borderRadius: 2.4,
-                mb: 0.45,
+                borderRadius: 3,
+                mb: 0.7,
+                border: '1px solid',
+                borderColor: isSelected
+                  ? (isDark ? 'rgba(103,182,255,0.36)' : 'rgba(34,154,104,0.28)')
+                  : (isDark ? 'rgba(216,231,255,0.08)' : 'rgba(21,53,40,0.06)'),
                 bgcolor: isSelected
                   ? isDark
-                    ? 'rgba(92,136,181,0.36)'
-                    : 'rgba(31,163,91,0.2)'
+                    ? 'rgba(47, 85, 122, 0.72)'
+                    : 'rgba(230, 246, 238, 0.98)'
                   : hasUnread
                     ? isDark
-                      ? 'rgba(63,117,166,0.28)'
-                      : 'rgba(31,163,91,0.13)'
+                      ? 'rgba(24, 44, 68, 0.88)'
+                      : 'rgba(245, 251, 247, 0.98)'
                     : isDark
-                      ? 'transparent'
-                      : '#FFFFFF',
+                      ? 'rgba(14, 24, 37, 0.72)'
+                      : 'rgba(255,255,255,0.86)',
+                boxShadow: isDark
+                  ? '0 14px 28px rgba(0,0,0,0.18)'
+                  : '0 14px 28px rgba(25,82,57,0.06)',
               }}
             >
               <Avatar
@@ -979,6 +1028,9 @@ export default function ChatsPage() {
                   width: chatCompactMode ? 48 : 56,
                   height: chatCompactMode ? 48 : 56,
                   bgcolor: chat.type === 'saved' ? '#D6A21B' : 'primary.main',
+                  boxShadow: isDark
+                    ? '0 10px 24px rgba(0,0,0,0.24)'
+                    : '0 10px 24px rgba(31,163,91,0.16)',
                 }}
               >
                 {chat.type === 'saved' ? <BookmarkRoundedIcon sx={{ fontSize: 30 }} /> : avatarData.initial}
@@ -1041,7 +1093,7 @@ export default function ChatsPage() {
       </Fab>
 
       <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        <Box sx={{ width: 'min(320px, 88vw)', height: '100%', bgcolor: isDark ? '#0E1B2A' : '#F7FAF8', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ width: 'min(320px, 88vw)', height: '100%', bgcolor: 'transparent', display: 'flex', flexDirection: 'column' }}>
           <Box
             sx={{
               pt: 'max(env(safe-area-inset-top), 12px)',
@@ -1126,9 +1178,11 @@ export default function ChatsPage() {
                 <ListItemButton sx={menuItemSx} onClick={() => { navigate('/support'); setDrawerOpen(false); }}>
                   <ListItemIcon><PsychologyRoundedIcon /></ListItemIcon><ListItemText primary="AI чат" />
                 </ListItemButton>
-                <ListItemButton sx={menuItemSx} onClick={() => { navigate('/game'); setDrawerOpen(false); }}>
-                  <ListItemIcon><SportsEsportsRoundedIcon /></ListItemIcon><ListItemText primary="Игра" />
-                </ListItemButton>
+                {gameEnabled && (
+                  <ListItemButton sx={menuItemSx} onClick={() => { navigate('/game'); setDrawerOpen(false); }}>
+                    <ListItemIcon><SportsEsportsRoundedIcon /></ListItemIcon><ListItemText primary="Игра" />
+                  </ListItemButton>
+                )}
                 {isCreator && (
                   <ListItemButton sx={menuItemSx} onClick={() => { navigate('/admin'); setDrawerOpen(false); }}>
                     <ListItemIcon><AdminPanelSettingsIcon /></ListItemIcon><ListItemText primary="Инструменты" />

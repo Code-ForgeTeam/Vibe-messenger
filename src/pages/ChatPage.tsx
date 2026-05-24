@@ -70,7 +70,10 @@ type QuickReaction = (typeof QUICK_REACTIONS)[number];
 const QUICK_EMOJIS = ['😀', '😁', '😂', '😊', '😍', '😘', '🤔', '😎', '🥳', '🙏', '👍', '🔥', '❤️', '👏', '🤝', '😢', '😡'];
 const RECENT_EMOJI_STORAGE_KEY = 'vibe:recent-emojis';
 const REACTION_VIEWER_LIMIT = 300;
-const GALLERY_PAGE_SIZE = 40;
+const GALLERY_PAGE_SIZE = 24;
+const GALLERY_CACHE_TTL_MS = 45000;
+const INLINE_GALLERY_LIMIT = 72;
+const INLINE_GALLERY_THUMB_SIZE = 180;
 const MESSAGE_RENDER_BATCH = 160;
 const MESSAGE_RENDER_STEP = 90;
 const COMPOSER_POLL_PAUSE_MS = 1400;
@@ -194,6 +197,12 @@ const galleryPathPriority = (pathValue: string): number => {
   return 9;
 };
 
+const isSamsungLikeDevice = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
+  const ua = String(navigator.userAgent || '').toLowerCase();
+  return ua.includes('samsung') || ua.includes('samsungbrowser') || ua.includes('sm-') || ua.includes('galaxy');
+};
+
 export default function ChatPage() {
   const { chatId = '' } = useParams();
   const navigate = useNavigate();
@@ -240,6 +249,7 @@ export default function ChatPage() {
   const [mediaPickerThumbs, setMediaPickerThumbs] = useState<string[]>([]);
   const [deviceGalleryItems, setDeviceGalleryItems] = useState<DeviceGalleryItem[]>([]);
   const [deviceGalleryLoading, setDeviceGalleryLoading] = useState(false);
+  const [preferSystemGalleryPicker, setPreferSystemGalleryPicker] = useState(false);
   const [galleryVisibleCount, setGalleryVisibleCount] = useState(GALLERY_PAGE_SIZE);
   const [renderedRowsLimit, setRenderedRowsLimit] = useState(MESSAGE_RENDER_BATCH);
   const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null);
@@ -666,7 +676,7 @@ export default function ChatPage() {
   const loadDeviceGallery = async () => {
     if (galleryLoadInFlightRef.current) return;
     const hadCachedItems = deviceGalleryItems.length > 0;
-    if (hadCachedItems && Date.now() - galleryLastLoadedAtRef.current < 20000) return;
+    if (hadCachedItems && Date.now() - galleryLastLoadedAtRef.current < GALLERY_CACHE_TTL_MS) return;
 
     galleryLoadInFlightRef.current = true;
     setDeviceGalleryLoading(true);
@@ -677,11 +687,13 @@ export default function ChatPage() {
         setDeviceGalleryItems([]);
         return;
       }
+      if (platform === 'android' && isSamsungLikeDevice()) {
+        setPreferSystemGalleryPicker(true);
+        setDeviceGalleryItems([]);
+        return;
+      }
 
-      const [mediaModule, filesystemModule] = await Promise.all([
-        import('@capacitor-community/media'),
-        import('@capacitor/filesystem'),
-      ]);
+      const mediaModule = await import('@capacitor-community/media');
       const { Media } = mediaModule;
       const normalizeFromMediaResult = (items: any[]): DeviceGalleryItem[] => {
         const next: DeviceGalleryItem[] = [];
@@ -714,87 +726,27 @@ export default function ChatPage() {
         }
         return next
           .sort((a, b) => new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime())
-          .slice(0, 220);
+          .slice(0, INLINE_GALLERY_LIMIT);
       };
       if (platform === 'android') {
-        try {
-          const mediaResult = await Media.getMedias({
-            quantity: 260,
-            thumbnailWidth: 260,
-            thumbnailHeight: 260,
-            thumbnailQuality: 60,
-            types: 'photos',
-            sort: [{ key: 'creationDate', ascending: false }],
-          });
-          const fromMedia = normalizeFromMediaResult(Array.isArray(mediaResult?.medias) ? mediaResult.medias : []);
-          if (fromMedia.length > 0) {
-            setDeviceGalleryItems(fromMedia);
-            setGalleryVisibleCount(GALLERY_PAGE_SIZE);
-            galleryLastLoadedAtRef.current = Date.now();
-            return;
-          }
-        } catch {
-          // fallback to filesystem scan below
-        }
-
-        const { Filesystem } = filesystemModule;
-        const albums = await Media.getAlbums();
-        const albumPaths = (Array.isArray(albums?.albums) ? albums.albums : [])
-          .map((album) => normalizeNativePath(String(album?.identifier || '')))
-          .filter((value, index, arr) => value !== '' && arr.indexOf(value) === index)
-          .sort((a, b) => galleryPathPriority(a) - galleryPathPriority(b) || a.localeCompare(b))
-          .slice(0, 20);
-
-        const next: DeviceGalleryItem[] = [];
-        const seen = new Set<string>();
-        for (let albumIndex = 0; albumIndex < albumPaths.length; albumIndex += 1) {
-          if (next.length >= 260) break;
-          const albumPath = albumPaths[albumIndex];
-          try {
-            const listed = await Filesystem.readdir({ path: albumPath });
-            const files = (Array.isArray(listed?.files) ? listed.files : [])
-              .filter((fileInfo) => String(fileInfo?.type || '') === 'file')
-              .filter((fileInfo) => IMAGE_FILE_RE.test(String(fileInfo?.name || '').trim()))
-              .sort((a, b) => Number(b?.mtime || 0) - Number(a?.mtime || 0))
-              .slice(0, 40);
-            for (const fileInfo of files) {
-              if (next.length >= 260) break;
-              if (String(fileInfo?.type || '') !== 'file') continue;
-              const name = String(fileInfo?.name || '').trim();
-              if (!IMAGE_FILE_RE.test(name)) continue;
-              const uriRaw =
-                normalizeNativePath(String(fileInfo?.uri || '')) ||
-                normalizeNativePath(`${albumPath}/${name}`);
-              if (!uriRaw || seen.has(uriRaw)) continue;
-              seen.add(uriRaw);
-              const mtime = Number(fileInfo?.mtime || 0);
-              next.push({
-                identifier: uriRaw,
-                path: uriRaw,
-                previewUrl: Capacitor.convertFileSrc(uriRaw),
-                creationDate: Number.isFinite(mtime) && mtime > 0 ? new Date(mtime).toISOString() : undefined,
-              });
-            }
-
-            if (albumIndex > 0 && albumIndex % 2 === 0) {
-              await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-            }
-          } catch {
-            // skip unreadable album path and continue
-          }
-        }
-
-        const sorted = next
-          .sort((a, b) => new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime())
-          .slice(0, 220);
-        setDeviceGalleryItems(sorted);
+        const mediaResult = await Media.getMedias({
+          quantity: INLINE_GALLERY_LIMIT,
+          thumbnailWidth: INLINE_GALLERY_THUMB_SIZE,
+          thumbnailHeight: INLINE_GALLERY_THUMB_SIZE,
+          thumbnailQuality: 46,
+          types: 'photos',
+          sort: [{ key: 'creationDate', ascending: false }],
+        });
+        const fromMedia = normalizeFromMediaResult(Array.isArray(mediaResult?.medias) ? mediaResult.medias : []);
+        setPreferSystemGalleryPicker(false);
+        setDeviceGalleryItems(fromMedia);
         setGalleryVisibleCount(GALLERY_PAGE_SIZE);
         galleryLastLoadedAtRef.current = Date.now();
         return;
       }
 
       const response = await Media.getMedias({
-        quantity: 220,
+        quantity: INLINE_GALLERY_LIMIT,
         thumbnailWidth: 260,
         thumbnailHeight: 260,
         thumbnailQuality: 58,
@@ -925,6 +877,36 @@ export default function ChatPage() {
       const platform = Capacitor.getPlatform();
       if (platform === 'web') {
         galleryInputRef.current?.click();
+        return;
+      }
+      if (platform === 'android' && preferSystemGalleryPicker) {
+        const { Camera } = cameraModule;
+        const picked = await Camera.pickImages({ quality: 82, limit: 20 });
+        const photos = Array.isArray(picked?.photos) ? picked.photos : [];
+        const filesFromGallery: File[] = [];
+        const thumbs: string[] = [];
+
+        for (let index = 0; index < photos.length; index += 1) {
+          const photo = photos[index];
+          const webPath = String(photo?.webPath || '').trim();
+          if (!webPath) continue;
+          thumbs.push(webPath);
+          try {
+            const file = await fileFromWebPath(webPath, `gallery-${Date.now()}-${index}`);
+            filesFromGallery.push(file);
+          } catch {
+            // keep successfully converted files
+          }
+        }
+
+        if (!filesFromGallery.length) {
+          pushSnackbar({ message: 'Не удалось получить фото из галереи', timeout: 2200, tone: 'error' });
+          return;
+        }
+
+        setMediaPickerThumbs((prev) => [...thumbs, ...prev].slice(0, 24));
+        setMediaPickerOpen(false);
+        await appendAndUploadFiles(filesFromGallery);
         return;
       }
       if (platform === 'ios') {
@@ -1089,6 +1071,7 @@ export default function ChatPage() {
     import('@capacitor/core')
       .then(({ Capacitor }) => {
         if (Capacitor.getPlatform() === 'android') {
+          setPreferSystemGalleryPicker(isSamsungLikeDevice());
           loadDeviceGallery().catch(() => null);
         }
       })
@@ -3142,6 +3125,10 @@ export default function ChatPage() {
               <Box sx={{ py: 3, display: 'grid', placeItems: 'center' }}>
                 <CircularProgress size={20} />
               </Box>
+            ) : preferSystemGalleryPicker ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 2, textAlign: 'center' }}>
+                На Samsung открываем системную галерею для стабильной работы без зависаний.
+              </Typography>
             ) : deviceGalleryItems.length > 0 ? (
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.55 }}>
                 {visibleDeviceGalleryItems.map((item) => (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import {
   Alert,
   Avatar,
@@ -9,11 +9,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   List,
   ListItemButton,
   ListItemText,
   Paper,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material';
@@ -24,6 +26,7 @@ import { adminApi } from '../lib/api';
 import { isCreatorUser } from '../lib/creator';
 import { useAuthStore } from '../stores/authStore';
 import { useAdminStore } from '../stores/adminStore';
+import { useAppConfigStore } from '../stores/appConfigStore';
 import { useChatStore } from '../stores/chatStore';
 import { useSnackbarStore } from '../stores/snackbarStore';
 
@@ -32,6 +35,7 @@ type AdminOverview = {
   chats?: number;
   messages?: number;
   creatorUserId?: string;
+  gameEnabled?: boolean;
 };
 
 type AdminUser = {
@@ -102,10 +106,14 @@ export default function AdminPage() {
   const setAdminAccess = useAdminStore((s) => s.setAdminAccess);
   const loadChats = useChatStore((s) => s.loadChats);
   const pushSnackbar = useSnackbarStore((s) => s.push);
+  const gameEnabled = useAppConfigStore((s) => s.gameEnabled);
+  const hydrateAppConfig = useAppConfigStore((s) => s.hydrateConfig);
+  const updateGameEnabled = useAppConfigStore((s) => s.updateGameEnabled);
 
   const [overview, setOverview] = useState<AdminOverview>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
+  const [isGameToggleBusy, setIsGameToggleBusy] = useState(false);
   const [action, setAction] = useState<AdminAction>(null);
   const [targetUsername, setTargetUsername] = useState('');
   const [confirmDeleteUserOpen, setConfirmDeleteUserOpen] = useState(false);
@@ -128,6 +136,7 @@ export default function AdminPage() {
       const data = await adminApi.getOverview();
       setAdminAccess(true, me.id);
       setOverview(data || {});
+      hydrateAppConfig(data || {});
     } catch (error: any) {
       if (error?.response?.status === 403) {
         setAdminAccess(false, me.id);
@@ -140,6 +149,27 @@ export default function AdminPage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleToggleGame = async (_event: ChangeEvent<HTMLInputElement>, checked: boolean) => {
+    setIsGameToggleBusy(true);
+    try {
+      await updateGameEnabled(checked);
+      setOverview((prev) => ({ ...prev, gameEnabled: checked }));
+      pushSnackbar({
+        message: checked ? 'Кнопка "Игра" снова доступна всем' : 'Кнопка "Игра" отключена для всех',
+        timeout: 2400,
+        tone: 'success',
+      });
+    } catch (error: any) {
+      pushSnackbar({
+        message: error?.response?.data?.error || 'Не удалось обновить доступность игры',
+        timeout: 2600,
+        tone: 'error',
+      });
+    } finally {
+      setIsGameToggleBusy(false);
     }
   };
 
@@ -372,6 +402,44 @@ export default function AdminPage() {
                     <Typography variant="caption" color="text.secondary">Сообщения</Typography>
                     <Typography sx={{ fontWeight: 800 }}>{overview.messages ?? 0}</Typography>
                   </Paper>
+                </Stack>
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  mt: 1.4,
+                  p: 1.5,
+                  borderRadius: 3,
+                  border: '1px solid',
+                  borderColor: isDark ? 'rgba(129,187,243,0.24)' : 'rgba(34,154,104,0.18)',
+                  bgcolor: isDark ? 'rgba(15,34,53,0.8)' : 'rgba(248,252,249,0.96)',
+                }}
+              >
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1.4}
+                  alignItems={{ xs: 'flex-start', sm: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Box>
+                    <Typography sx={{ fontWeight: 800, mb: 0.35 }}>Игра для пользователей</Typography>
+                    <Typography color="text.secondary" sx={{ maxWidth: 560 }}>
+                      Управляет кнопкой и переходом в раздел игры по всему приложению.
+                    </Typography>
+                  </Box>
+                  <FormControlLabel
+                    sx={{ m: 0 }}
+                    control={
+                      <Switch
+                        checked={gameEnabled}
+                        onChange={handleToggleGame}
+                        disabled={isGameToggleBusy}
+                      />
+                    }
+                    label={gameEnabled ? 'Включена' : 'Отключена'}
+                    labelPlacement="start"
+                  />
                 </Stack>
               </Paper>
 

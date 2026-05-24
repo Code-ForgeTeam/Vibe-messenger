@@ -159,6 +159,8 @@ export const adminApi = {
   clearAllMessages: async () => (await api.post('/admin/clear-messages')).data,
   clearAllContent: async () => (await api.post('/admin/clear-content')).data,
   clearPushTokens: async () => (await api.post('/admin/clear-push-tokens')).data,
+  updateAppConfig: async (payload: { gameEnabled: boolean }) =>
+    (await api.put('/admin/app-config', payload)).data,
   createEvent: async (payload: {
     template?: 'update' | 'custom';
     title?: string;
@@ -189,6 +191,10 @@ export const storyApi = {
 
 export const gameApi = {
   getOnlineStatus: async () => (await api.get('/game/online')).data,
+};
+
+export const appConfigApi = {
+  get: async () => (await api.get('/app/config')).data,
 };
 
 export const supportApi = {

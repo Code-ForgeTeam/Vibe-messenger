@@ -26,6 +26,7 @@ import {
 } from './lib/updateChecker';
 import { useAuthStore } from './stores/authStore';
 import { useAdminStore } from './stores/adminStore';
+import { useAppConfigStore } from './stores/appConfigStore';
 import { useChatStore } from './stores/chatStore';
 import { useNotificationStore } from './stores/notificationStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -311,11 +312,15 @@ function Guard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const navigate = useNavigate();
   const auth = useAuthStore();
   const checkAdminAccess = useAdminStore((s) => s.checkAdminAccess);
   const setAdminAccess = useAdminStore((s) => s.setAdminAccess);
   const resetAdminAccess = useAdminStore((s) => s.reset);
+  const gameEnabled = useAppConfigStore((s) => s.gameEnabled);
+  const loadAppConfig = useAppConfigStore((s) => s.loadConfig);
   const initSocketHandlers = useChatStore((s) => s.initSocketHandlers);
   const loadChats = useChatStore((s) => s.loadChats);
   const loadBanners = useNotificationStore((s) => s.loadBanners);
@@ -344,6 +349,10 @@ export default function App() {
     pathname !== '/auth' &&
     pathname !== '/chats' &&
     !pathname.startsWith('/chat/');
+
+  useEffect(() => {
+    loadAppConfig().catch(() => null);
+  }, [loadAppConfig]);
 
   const resetEdgeSwipe = () => {
     edgeSwipeRef.current.active = false;
@@ -473,6 +482,13 @@ export default function App() {
       setShowLaunchIntro(false);
     }
   }, [launchIntroEnabled]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+    if (!pathname.startsWith('/game')) return;
+    if (gameEnabled) return;
+    navigate('/chats', { replace: true });
+  }, [auth.isAuthenticated, gameEnabled, navigate, pathname]);
 
   useEffect(() => {
     if (!launchIntroActive) {
@@ -898,6 +914,18 @@ export default function App() {
         pb: isChatRoute || isSupportRoute || isGameRoute ? 0 : 10,
         overflow: 'hidden',
         backgroundColor: 'background.default',
+        backgroundImage: isDark
+          ? 'radial-gradient(circle at top left, rgba(100,180,255,0.12), transparent 28%), radial-gradient(circle at top right, rgba(123,226,196,0.09), transparent 22%)'
+          : 'radial-gradient(circle at top left, rgba(34,154,104,0.12), transparent 28%), radial-gradient(circle at top right, rgba(77,124,254,0.08), transparent 22%)',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          background: isDark
+            ? 'linear-gradient(180deg, rgba(8,17,29,0.30), rgba(8,17,29,0.06) 42%, rgba(8,17,29,0.34) 100%)'
+            : 'linear-gradient(180deg, rgba(255,255,255,0.42), rgba(255,255,255,0.08) 42%, rgba(233,243,237,0.46) 100%)',
+        },
       }}
       onPointerDown={handleGlobalPointerDown}
       onPointerMove={handleGlobalPointerMove}
@@ -945,7 +973,14 @@ export default function App() {
             <Route path="/support" element={<Guard><SupportPage /></Guard>} />
             <Route path="/support-agent" element={<Guard><SupportAgentPage /></Guard>} />
             <Route path="/author-support" element={<Guard><AuthorSupportPage /></Guard>} />
-            <Route path="/game" element={<Guard><GamePage /></Guard>} />
+            <Route
+              path="/game"
+              element={
+                <Guard>
+                  {gameEnabled ? <GamePage /> : <Navigate to="/chats" replace />}
+                </Guard>
+              }
+            />
 
             <Route path="*" element={<Navigate to="/chats" replace />} />
           </Routes>

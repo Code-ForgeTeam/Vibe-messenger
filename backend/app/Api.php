@@ -21,6 +21,7 @@ final class Api
     private ?bool $storyTablesReady = null;
     private ?bool $storyMediaTableReady = null;
     private ?bool $notificationsTablesReady = null;
+    private ?bool $appSettingsTableReady = null;
     private ?array $chatColumns = null;
     private ?array $notificationColumns = null;
     private ?array $firebaseAccessTokenCache = null;
@@ -44,6 +45,7 @@ final class Api
 
         if ($path === '/health') { $this->json(['ok' => true]); }
         if ($path === '/api') { $this->json(['ok' => true, 'message' => 'API root']); }
+        if ($path === '/api/app/config' && $method === 'GET') { $this->appConfig(); }
         if ($path === '/api/game/online' && $method === 'GET') { $this->gameOnlineStatus(); }
 
         if ($path === '/api/auth/register' && $method === 'POST') { $this->register($body); }
@@ -56,6 +58,7 @@ final class Api
         if ($path === '/api/admin/clear-push-tokens' && $method === 'POST') { $this->adminClearPushTokens(); }
         if ($path === '/api/admin/reset-users' && $method === 'POST') { $this->adminResetUsers(); }
         if ($path === '/api/admin/users' && $method === 'GET') { $this->adminUsers(); }
+        if ($path === '/api/admin/app-config' && $method === 'PUT') { $this->adminUpdateAppConfig($body); }
         if ($path === '/api/admin/events' && $method === 'POST') { $this->adminCreateEvent($body); }
 
         if ($path === '/api/users/me' && $method === 'GET') { $this->me(); }
@@ -263,6 +266,11 @@ final class Api
         $this->json($payload);
     }
 
+    private function appConfig(): void
+    {
+        $this->json($this->appConfigPayload());
+    }
+
     private function adminOverview(): void
     {
         $userId = $this->authUserId();
@@ -278,6 +286,26 @@ final class Api
             'chats' => $chats,
             'messages' => $messages,
             'creatorUserId' => $this->creatorUserId(),
+            'gameEnabled' => $this->readAppSettingBool('game_enabled', true),
+        ]);
+    }
+
+    private function adminUpdateAppConfig(array $body): void
+    {
+        $userId = $this->authUserId();
+        $this->assertCreator($userId);
+
+        $gameEnabled = array_key_exists('gameEnabled', $body)
+            ? (bool)$body['gameEnabled']
+            : $this->readAppSettingBool('game_enabled', true);
+
+        if (!$this->writeAppSetting('game_enabled', $gameEnabled ? '1' : '0')) {
+            $this->json(['error' => 'Failed to update app configuration'], 500);
+        }
+
+        $this->json([
+            'ok' => true,
+            'gameEnabled' => $gameEnabled,
         ]);
     }
 
@@ -796,6 +824,94 @@ final class Api
         }
 
         return $this->notificationsTablesReady;
+    }
+
+    private function appConfigPayload(): array
+    {
+        return [
+            'ok' => true,
+            'gameEnabled' => $this->readAppSettingBool('game_enabled', true),
+        ];
+    }
+
+    private function readAppSettingBool(string $key, bool $default): bool
+    {
+        $value = $this->readAppSetting($key);
+        if ($value === null) {
+            return $default;
+        }
+
+        $normalized = strtolower(trim($value));
+        if ($normalized === '0' || $normalized === 'false' || $normalized === 'off' || $normalized === 'no') {
+            return false;
+        }
+        if ($normalized === '1' || $normalized === 'true' || $normalized === 'on' || $normalized === 'yes') {
+            return true;
+        }
+
+        return $default;
+    }
+
+    private function readAppSetting(string $key): ?string
+    {
+        if (!$this->ensureAppSettingsTable()) {
+            return null;
+        }
+
+        try {
+            $stmt = $this->db()->prepare('SELECT value_text FROM app_settings WHERE setting_key = ? LIMIT 1');
+            $stmt->execute([$key]);
+            $value = $stmt->fetchColumn();
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($value === false || $value === null) {
+            return null;
+        }
+
+        return (string)$value;
+    }
+
+    private function writeAppSetting(string $key, string $value): bool
+    {
+        if (!$this->ensureAppSettingsTable()) {
+            return false;
+        }
+
+        try {
+            $stmt = $this->db()->prepare(
+                'INSERT INTO app_settings (setting_key, value_text, updated_at)
+                 VALUES (?, ?, CURRENT_TIMESTAMP)
+                 ON DUPLICATE KEY UPDATE value_text = VALUES(value_text), updated_at = CURRENT_TIMESTAMP'
+            );
+            $stmt->execute([$key, $value]);
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function ensureAppSettingsTable(): bool
+    {
+        if ($this->appSettingsTableReady !== null) {
+            return $this->appSettingsTableReady;
+        }
+
+        try {
+            $this->db()->exec(
+                'CREATE TABLE IF NOT EXISTS app_settings (
+                    setting_key VARCHAR(120) NOT NULL PRIMARY KEY,
+                    value_text TEXT NULL,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+            );
+            $this->appSettingsTableReady = true;
+        } catch (\Throwable) {
+            $this->appSettingsTableReady = false;
+        }
+
+        return $this->appSettingsTableReady;
     }
 
     private function normalizeNotificationColor(string $raw): ?string
