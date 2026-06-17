@@ -11,6 +11,7 @@ import {
   Menu,
   MenuItem,
   Popover,
+  Stack,
   TextField,
   Typography,
 } from '@mui/material';
@@ -71,9 +72,12 @@ const QUICK_EMOJIS = ['😀', '😁', '😂', '😊', '😍', '😘', '🤔', '�
 const RECENT_EMOJI_STORAGE_KEY = 'vibe:recent-emojis';
 const REACTION_VIEWER_LIMIT = 300;
 const GALLERY_PAGE_SIZE = 24;
+const SAMSUNG_GALLERY_PAGE_SIZE = 12;
 const GALLERY_CACHE_TTL_MS = 45000;
 const INLINE_GALLERY_LIMIT = 72;
 const INLINE_GALLERY_THUMB_SIZE = 180;
+const SAMSUNG_INLINE_GALLERY_LIMIT = 24;
+const SAMSUNG_INLINE_GALLERY_THUMB_SIZE = 112;
 const MESSAGE_RENDER_BATCH = 160;
 const MESSAGE_RENDER_STEP = 90;
 const COMPOSER_POLL_PAUSE_MS = 1400;
@@ -203,6 +207,10 @@ const isSamsungLikeDevice = (): boolean => {
   return ua.includes('samsung') || ua.includes('samsungbrowser') || ua.includes('sm-') || ua.includes('galaxy');
 };
 
+const getGalleryPageSize = (): number => (isSamsungLikeDevice() ? SAMSUNG_GALLERY_PAGE_SIZE : GALLERY_PAGE_SIZE);
+const getInlineGalleryLimit = (): number => (isSamsungLikeDevice() ? SAMSUNG_INLINE_GALLERY_LIMIT : INLINE_GALLERY_LIMIT);
+const getInlineGalleryThumbSize = (): number => (isSamsungLikeDevice() ? SAMSUNG_INLINE_GALLERY_THUMB_SIZE : INLINE_GALLERY_THUMB_SIZE);
+
 export default function ChatPage() {
   const { chatId = '' } = useParams();
   const navigate = useNavigate();
@@ -250,7 +258,7 @@ export default function ChatPage() {
   const [deviceGalleryItems, setDeviceGalleryItems] = useState<DeviceGalleryItem[]>([]);
   const [deviceGalleryLoading, setDeviceGalleryLoading] = useState(false);
   const [preferSystemGalleryPicker, setPreferSystemGalleryPicker] = useState(false);
-  const [galleryVisibleCount, setGalleryVisibleCount] = useState(GALLERY_PAGE_SIZE);
+  const [galleryVisibleCount, setGalleryVisibleCount] = useState(() => getGalleryPageSize());
   const [renderedRowsLimit, setRenderedRowsLimit] = useState(MESSAGE_RENDER_BATCH);
   const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null);
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
@@ -683,12 +691,10 @@ export default function ChatPage() {
     try {
       const { Capacitor } = await import('@capacitor/core');
       const platform = Capacitor.getPlatform();
+      const isSamsung = platform === 'android' && isSamsungLikeDevice();
+      const inlineGalleryLimit = getInlineGalleryLimit();
+      const inlineThumbSize = getInlineGalleryThumbSize();
       if (platform === 'web' || platform === 'ios') {
-        setDeviceGalleryItems([]);
-        return;
-      }
-      if (platform === 'android' && isSamsungLikeDevice()) {
-        setPreferSystemGalleryPicker(true);
         setDeviceGalleryItems([]);
         return;
       }
@@ -726,27 +732,27 @@ export default function ChatPage() {
         }
         return next
           .sort((a, b) => new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime())
-          .slice(0, INLINE_GALLERY_LIMIT);
+          .slice(0, inlineGalleryLimit);
       };
       if (platform === 'android') {
         const mediaResult = await Media.getMedias({
-          quantity: INLINE_GALLERY_LIMIT,
-          thumbnailWidth: INLINE_GALLERY_THUMB_SIZE,
-          thumbnailHeight: INLINE_GALLERY_THUMB_SIZE,
-          thumbnailQuality: 46,
+          quantity: inlineGalleryLimit,
+          thumbnailWidth: inlineThumbSize,
+          thumbnailHeight: inlineThumbSize,
+          thumbnailQuality: isSamsung ? 28 : 46,
           types: 'photos',
           sort: [{ key: 'creationDate', ascending: false }],
         });
         const fromMedia = normalizeFromMediaResult(Array.isArray(mediaResult?.medias) ? mediaResult.medias : []);
         setPreferSystemGalleryPicker(false);
         setDeviceGalleryItems(fromMedia);
-        setGalleryVisibleCount(GALLERY_PAGE_SIZE);
+        setGalleryVisibleCount(getGalleryPageSize());
         galleryLastLoadedAtRef.current = Date.now();
         return;
       }
 
       const response = await Media.getMedias({
-        quantity: INLINE_GALLERY_LIMIT,
+        quantity: inlineGalleryLimit,
         thumbnailWidth: 260,
         thumbnailHeight: 260,
         thumbnailQuality: 58,
@@ -756,9 +762,12 @@ export default function ChatPage() {
 
       const normalized = normalizeFromMediaResult(Array.isArray(response?.medias) ? response.medias : []);
       setDeviceGalleryItems(normalized);
-      setGalleryVisibleCount(GALLERY_PAGE_SIZE);
+      setGalleryVisibleCount(getGalleryPageSize());
       galleryLastLoadedAtRef.current = Date.now();
     } catch {
+      if (isSamsungLikeDevice() && !hadCachedItems) {
+        setPreferSystemGalleryPicker(true);
+      }
       if (!hadCachedItems) {
         setDeviceGalleryItems([]);
       }
@@ -1012,7 +1021,7 @@ export default function ChatPage() {
     if (galleryVisibleCount >= deviceGalleryItems.length) return;
     const nearBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 120;
     if (!nearBottom) return;
-    setGalleryVisibleCount((prev) => Math.min(deviceGalleryItems.length, prev + GALLERY_PAGE_SIZE));
+    setGalleryVisibleCount((prev) => Math.min(deviceGalleryItems.length, prev + getGalleryPageSize()));
   };
 
   const submit = async () => {
@@ -1071,7 +1080,8 @@ export default function ChatPage() {
     import('@capacitor/core')
       .then(({ Capacitor }) => {
         if (Capacitor.getPlatform() === 'android') {
-          setPreferSystemGalleryPicker(isSamsungLikeDevice());
+          setPreferSystemGalleryPicker(false);
+          setGalleryVisibleCount(getGalleryPageSize());
           loadDeviceGallery().catch(() => null);
         }
       })
@@ -3125,35 +3135,52 @@ export default function ChatPage() {
               <Box sx={{ py: 3, display: 'grid', placeItems: 'center' }}>
                 <CircularProgress size={20} />
               </Box>
-            ) : preferSystemGalleryPicker ? (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 2, textAlign: 'center' }}>
-                На Samsung открываем системную галерею для стабильной работы без зависаний.
-              </Typography>
             ) : deviceGalleryItems.length > 0 ? (
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.55 }}>
-                {visibleDeviceGalleryItems.map((item) => (
-                  <ButtonBase
-                    key={item.identifier}
-                    disabled={mediaPickerBusy}
-                    onClick={() => void handlePickFromInlineGallery(item)}
-                    sx={{
-                      borderRadius: 1.2,
-                      overflow: 'hidden',
-                      width: '100%',
-                      aspectRatio: '1 / 1',
-                    }}
-                  >
-                    <Box
-                      component="img"
-                      src={item.previewUrl}
-                      alt="gallery"
-                      loading="lazy"
-                      decoding="async"
-                      sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    />
-                  </ButtonBase>
-                ))}
-              </Box>
+              <Stack spacing={0.85}>
+                {isSamsungLikeDevice() ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ px: 0.25 }}>
+                    На Samsung галерея открыта во встроенном облегчённом режиме, чтобы не зависала при прокрутке.
+                  </Typography>
+                ) : null}
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.55 }}>
+                  {visibleDeviceGalleryItems.map((item) => (
+                    <ButtonBase
+                      key={item.identifier}
+                      disabled={mediaPickerBusy}
+                      onClick={() => void handlePickFromInlineGallery(item)}
+                      sx={{
+                        borderRadius: 1.2,
+                        overflow: 'hidden',
+                        width: '100%',
+                        aspectRatio: '1 / 1',
+                      }}
+                    >
+                      <Box
+                        component="img"
+                        src={item.previewUrl}
+                        alt="gallery"
+                        loading="lazy"
+                        decoding="async"
+                        sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    </ButtonBase>
+                  ))}
+                </Box>
+              </Stack>
+            ) : preferSystemGalleryPicker ? (
+              <Stack spacing={1} sx={{ py: 1.2, alignItems: 'center', textAlign: 'center' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 320 }}>
+                  Встроенная галерея сейчас не ответила, поэтому можно открыть системную галерею как запасной вариант.
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={mediaPickerBusy}
+                  onClick={() => void handlePickFromGalleryLegacy()}
+                >
+                  Открыть системную галерею
+                </Button>
+              </Stack>
             ) : mediaPickerGalleryThumbs.length > 0 ? (
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.55 }}>
                 {mediaPickerGalleryThumbs.map((thumb, index) => (
@@ -3172,9 +3199,19 @@ export default function ChatPage() {
                 ))}
               </Box>
             ) : (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 2, textAlign: 'center' }}>
-                Галерея пока недоступна. Нажми на иконку галереи.
-              </Typography>
+              <Stack spacing={1} sx={{ py: 1.2, alignItems: 'center', textAlign: 'center' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 320 }}>
+                  Галерея пока недоступна. Можно открыть системную галерею или выбрать фото через кнопку выше.
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={mediaPickerBusy}
+                  onClick={() => void handlePickFromGalleryLegacy()}
+                >
+                  Открыть системную галерею
+                </Button>
+              </Stack>
             )}
           </Box>
         </Box>

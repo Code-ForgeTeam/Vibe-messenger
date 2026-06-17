@@ -58,7 +58,7 @@ final class Api
         if ($path === '/api/admin/clear-push-tokens' && $method === 'POST') { $this->adminClearPushTokens(); }
         if ($path === '/api/admin/reset-users' && $method === 'POST') { $this->adminResetUsers(); }
         if ($path === '/api/admin/users' && $method === 'GET') { $this->adminUsers(); }
-        if ($path === '/api/admin/app-config' && $method === 'PUT') { $this->adminUpdateAppConfig($body); }
+        if ($path === '/api/admin/app-config' && ($method === 'PUT' || $method === 'POST')) { $this->adminUpdateAppConfig($body); }
         if ($path === '/api/admin/events' && $method === 'POST') { $this->adminCreateEvent($body); }
 
         if ($path === '/api/users/me' && $method === 'GET') { $this->me(); }

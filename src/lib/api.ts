@@ -159,8 +159,39 @@ export const adminApi = {
   clearAllMessages: async () => (await api.post('/admin/clear-messages')).data,
   clearAllContent: async () => (await api.post('/admin/clear-content')).data,
   clearPushTokens: async () => (await api.post('/admin/clear-push-tokens')).data,
-  updateAppConfig: async (payload: { gameEnabled: boolean }) =>
-    (await api.put('/admin/app-config', payload)).data,
+  updateAppConfig: async (payload: { gameEnabled: boolean }) => {
+    const withUnavailableConfigError = (error: any) => {
+      const status = Number(error?.response?.status ?? 0);
+      if (status !== 404 && status !== 405) {
+        return error;
+      }
+
+      error.response = {
+        ...error.response,
+        data: {
+          ...error?.response?.data,
+          errorCode: 'ADMIN_APP_CONFIG_UNAVAILABLE',
+          error:
+            'Переключатель игры недоступен на этом сервере: обновите backend/app/Api.php на хостинге, и настройка начнет работать для всех.',
+        },
+      };
+      return error;
+    };
+
+    try {
+      return (await api.put('/admin/app-config', payload)).data;
+    } catch (error: any) {
+      const status = Number(error?.response?.status ?? 0);
+      if (status !== 404 && status !== 405) {
+        throw error;
+      }
+      try {
+        return (await api.post('/admin/app-config', payload)).data;
+      } catch (fallbackError: any) {
+        throw withUnavailableConfigError(fallbackError);
+      }
+    }
+  },
   createEvent: async (payload: {
     template?: 'update' | 'custom';
     title?: string;
