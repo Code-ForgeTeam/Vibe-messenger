@@ -348,7 +348,7 @@ export default function AdminPage() {
         pb: 'max(env(safe-area-inset-bottom), 96px)',
         height: '100%',
         overflowY: 'auto',
-        bgcolor: isDark ? '#0D1A2E' : '#FFFFFF',
+        bgcolor: 'transparent',
       }}
     >
       <AppHeader title="Инструменты" />

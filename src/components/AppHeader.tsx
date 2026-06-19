@@ -28,25 +28,25 @@ export function AppHeader({ title, showBack = true, backTo = '/chats', leftSlot,
         pt: 'max(env(safe-area-inset-top), 12px)',
         pb: 1.1,
         mb: 1.15,
-        backdropFilter: 'blur(18px)',
+        backdropFilter: 'blur(16px)',
         background: isDark
-          ? 'linear-gradient(180deg, rgba(8, 17, 29, 0.94) 46%, rgba(8, 17, 29, 0))'
-          : 'linear-gradient(180deg, rgba(249, 252, 250, 0.94) 46%, rgba(249, 252, 250, 0))',
+          ? 'linear-gradient(180deg, rgba(8, 17, 29, 0.88) 44%, rgba(8, 17, 29, 0))'
+          : 'linear-gradient(180deg, rgba(249, 252, 250, 0.88) 44%, rgba(249, 252, 250, 0))',
       }}
     >
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
-          minHeight: 58,
-          px: 0.45,
-          borderRadius: 3.2,
+          minHeight: 56,
+          px: 0.5,
+          borderRadius: 3,
           border: '1px solid',
           borderColor: alpha(isDark ? '#D8E7FF' : '#153528', isDark ? 0.12 : 0.08),
-          bgcolor: isDark ? 'rgba(16, 28, 43, 0.78)' : 'rgba(255, 255, 255, 0.78)',
+          bgcolor: isDark ? 'rgba(16, 28, 43, 0.72)' : 'rgba(255, 255, 255, 0.74)',
           boxShadow: isDark
-            ? '0 18px 36px rgba(0, 0, 0, 0.22)'
-            : '0 18px 32px rgba(25, 82, 57, 0.08)',
+            ? '0 14px 30px rgba(0, 0, 0, 0.18)'
+            : '0 14px 26px rgba(25, 82, 57, 0.07)',
         }}
       >
       {leftSlot ??
@@ -56,7 +56,7 @@ export function AppHeader({ title, showBack = true, backTo = '/chats', leftSlot,
             sx={{
               bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(34,154,104,0.08)',
               '&:hover': {
-                bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(34,154,104,0.14)',
+                bgcolor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(34,154,104,0.12)',
               },
             }}
           >
@@ -75,6 +75,9 @@ export function AppHeader({ title, showBack = true, backTo = '/chats', leftSlot,
           ml: 0.85,
           flex: 1,
           minWidth: 0,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}
       >
         {title}

@@ -86,14 +86,14 @@ export default function SettingsPage() {
         pb: 'max(env(safe-area-inset-bottom), 92px)',
         height: '100%',
         overflowY: 'auto',
-        bgcolor: isDark ? '#0D1A2E' : '#F8FAFC',
+        bgcolor: 'transparent',
       }}
     >
       <AppHeader title="Настройки" />
 
       <Paper
         elevation={0}
-        sx={{ p: 1.5, mb: 1.2, borderRadius: 3, bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }}
+        sx={{ p: 1.5, mb: 1.2, borderRadius: 3, bgcolor: isDark ? 'rgba(16,29,46,0.68)' : 'rgba(255,255,255,0.74)' }}
       >
         <Box sx={{ textAlign: 'center', pb: 0.5, position: 'relative' }}>
           <IconButton
@@ -128,7 +128,7 @@ export default function SettingsPage() {
 
       <Paper
         elevation={0}
-        sx={{ borderRadius: 3, overflow: 'hidden', mb: 1.2, bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }}
+        sx={{ borderRadius: 3, overflow: 'hidden', mb: 1.2, bgcolor: isDark ? 'rgba(16,29,46,0.66)' : 'rgba(255,255,255,0.74)' }}
       >
         <Typography sx={{ px: 2, pt: 1.5, pb: 0.5, color: 'text.secondary', fontSize: 13 }}>Основные</Typography>
         <List disablePadding>
@@ -171,7 +171,7 @@ export default function SettingsPage() {
         </List>
       </Paper>
 
-      <Paper elevation={0} sx={{ borderRadius: 3, overflow: 'hidden', bgcolor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF' }}>
+      <Paper elevation={0} sx={{ borderRadius: 3, overflow: 'hidden', bgcolor: isDark ? 'rgba(16,29,46,0.66)' : 'rgba(255,255,255,0.74)' }}>
         <Typography sx={{ px: 2, pt: 1.5, pb: 0.5, color: 'text.secondary', fontSize: 13 }}>Приложение</Typography>
         <List disablePadding>
           <ListItemButton onClick={() => setTheme(appTheme === 'dark' ? 'light' : 'dark')} sx={{ py: 1.25 }}>

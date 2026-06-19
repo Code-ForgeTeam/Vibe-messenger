@@ -782,7 +782,7 @@ export default function ChatsPage() {
       <Paper
         sx={{
           p: 1,
-          borderRadius: 3.5,
+          borderRadius: 3,
           bgcolor: isDark ? 'rgba(16, 28, 43, 0.74)' : 'rgba(255,255,255,0.82)',
         }}
       >
@@ -793,7 +793,7 @@ export default function ChatsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           InputProps={{ startAdornment: <SearchRoundedIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}
-          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3.5 } }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
         />
         <Box sx={{ mt: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
           <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'text.secondary' }}>
@@ -810,7 +810,7 @@ export default function ChatsPage() {
           mt: 1.1,
           mb: 0.5,
           p: 0.8,
-          borderRadius: 3.5,
+          borderRadius: 3,
           bgcolor: isDark ? 'rgba(16, 28, 43, 0.72)' : 'rgba(255,255,255,0.82)',
         }}
       >

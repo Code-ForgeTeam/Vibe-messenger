@@ -30,7 +30,7 @@ import CollectionsRoundedIcon from '@mui/icons-material/CollectionsRounded';
 import InsertEmoticonRoundedIcon from '@mui/icons-material/InsertEmoticonRounded';
 import PushPinRoundedIcon from '@mui/icons-material/PushPinRounded';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import { messageApi, uploadApi, userApi } from '../lib/api';
 import { getSocket } from '../lib/socket';
 import { useChatStore } from '../stores/chatStore';
@@ -76,8 +76,8 @@ const SAMSUNG_GALLERY_PAGE_SIZE = 12;
 const GALLERY_CACHE_TTL_MS = 45000;
 const INLINE_GALLERY_LIMIT = 72;
 const INLINE_GALLERY_THUMB_SIZE = 180;
-const SAMSUNG_INLINE_GALLERY_LIMIT = 24;
-const SAMSUNG_INLINE_GALLERY_THUMB_SIZE = 112;
+const SAMSUNG_INLINE_GALLERY_LIMIT = 16;
+const SAMSUNG_INLINE_GALLERY_THUMB_SIZE = 96;
 const MESSAGE_RENDER_BATCH = 160;
 const MESSAGE_RENDER_STEP = 90;
 const COMPOSER_POLL_PAUSE_MS = 1400;
@@ -257,7 +257,8 @@ export default function ChatPage() {
   const [mediaPickerThumbs, setMediaPickerThumbs] = useState<string[]>([]);
   const [deviceGalleryItems, setDeviceGalleryItems] = useState<DeviceGalleryItem[]>([]);
   const [deviceGalleryLoading, setDeviceGalleryLoading] = useState(false);
-  const [preferSystemGalleryPicker, setPreferSystemGalleryPicker] = useState(false);
+  const [deviceGalleryError, setDeviceGalleryError] = useState('');
+  const [deviceGalleryFailureCount, setDeviceGalleryFailureCount] = useState(0);
   const [galleryVisibleCount, setGalleryVisibleCount] = useState(() => getGalleryPageSize());
   const [renderedRowsLimit, setRenderedRowsLimit] = useState(MESSAGE_RENDER_BATCH);
   const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null);
@@ -735,16 +736,39 @@ export default function ChatPage() {
           .slice(0, inlineGalleryLimit);
       };
       if (platform === 'android') {
-        const mediaResult = await Media.getMedias({
-          quantity: inlineGalleryLimit,
-          thumbnailWidth: inlineThumbSize,
-          thumbnailHeight: inlineThumbSize,
-          thumbnailQuality: isSamsung ? 28 : 46,
-          types: 'photos',
-          sort: [{ key: 'creationDate', ascending: false }],
-        });
-        const fromMedia = normalizeFromMediaResult(Array.isArray(mediaResult?.medias) ? mediaResult.medias : []);
-        setPreferSystemGalleryPicker(false);
+        const attempts = isSamsung
+          ? [
+              { quantity: inlineGalleryLimit, thumbSize: inlineThumbSize, quality: 24 },
+              { quantity: Math.min(12, inlineGalleryLimit), thumbSize: 84, quality: 18 },
+            ]
+          : [{ quantity: inlineGalleryLimit, thumbSize: inlineThumbSize, quality: 46 }];
+        let fromMedia: DeviceGalleryItem[] = [];
+        let lastError: unknown = null;
+
+        for (const attempt of attempts) {
+          try {
+            const mediaResult = await Media.getMedias({
+              quantity: attempt.quantity,
+              thumbnailWidth: attempt.thumbSize,
+              thumbnailHeight: attempt.thumbSize,
+              thumbnailQuality: attempt.quality,
+              types: 'photos',
+              sort: [{ key: 'creationDate', ascending: false }],
+            });
+            fromMedia = normalizeFromMediaResult(Array.isArray(mediaResult?.medias) ? mediaResult.medias : []);
+            if (fromMedia.length > 0) break;
+            lastError = new Error('EMPTY_GALLERY_RESULT');
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        if (!fromMedia.length) {
+          throw lastError ?? new Error('EMPTY_GALLERY_RESULT');
+        }
+
+        setDeviceGalleryError('');
+        setDeviceGalleryFailureCount(0);
         setDeviceGalleryItems(fromMedia);
         setGalleryVisibleCount(getGalleryPageSize());
         galleryLastLoadedAtRef.current = Date.now();
@@ -761,16 +785,21 @@ export default function ChatPage() {
       });
 
       const normalized = normalizeFromMediaResult(Array.isArray(response?.medias) ? response.medias : []);
+      setDeviceGalleryError('');
+      setDeviceGalleryFailureCount(0);
       setDeviceGalleryItems(normalized);
       setGalleryVisibleCount(getGalleryPageSize());
       galleryLastLoadedAtRef.current = Date.now();
     } catch {
-      if (isSamsungLikeDevice() && !hadCachedItems) {
-        setPreferSystemGalleryPicker(true);
-      }
       if (!hadCachedItems) {
         setDeviceGalleryItems([]);
       }
+      setDeviceGalleryFailureCount((prev) => prev + 1);
+      setDeviceGalleryError(
+        isSamsungLikeDevice()
+          ? 'Встроенная галерея не ответила с первого раза. Я оставил её включённой и можно сразу повторить попытку.'
+          : 'Не удалось загрузить встроенную галерею. Можно повторить попытку или открыть системную.'
+      );
       if (!hadCachedItems) pushSnackbar({ message: 'Не удалось загрузить фото устройства', timeout: 2200, tone: 'error' });
     } finally {
       galleryLoadInFlightRef.current = false;
@@ -888,12 +917,12 @@ export default function ChatPage() {
         galleryInputRef.current?.click();
         return;
       }
-      if (platform === 'android' && preferSystemGalleryPicker) {
-        const { Camera } = cameraModule;
-        const picked = await Camera.pickImages({ quality: 82, limit: 20 });
-        const photos = Array.isArray(picked?.photos) ? picked.photos : [];
+      if (platform === 'android') {
+        const photos: any[] = [];
         const filesFromGallery: File[] = [];
         const thumbs: string[] = [];
+        await loadDeviceGallery();
+        return;
 
         for (let index = 0; index < photos.length; index += 1) {
           const photo = photos[index];
@@ -1080,7 +1109,7 @@ export default function ChatPage() {
     import('@capacitor/core')
       .then(({ Capacitor }) => {
         if (Capacitor.getPlatform() === 'android') {
-          setPreferSystemGalleryPicker(false);
+          setDeviceGalleryError('');
           setGalleryVisibleCount(getGalleryPageSize());
           loadDeviceGallery().catch(() => null);
         }
@@ -2098,7 +2127,8 @@ export default function ChatPage() {
                 textDecoration: 'underline',
                 textDecorationThickness: '0.08em',
                 textUnderlineOffset: '0.12em',
-                wordBreak: 'break-all',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
               }}
             >
               {url}
@@ -2151,14 +2181,40 @@ export default function ChatPage() {
 
   return (
     <Box
-      sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: isDark ? '#0A1A32' : '#FFFFFF', color: isDark ? '#EAF1FF' : 'text.primary' }}
+      sx={{
+        position: 'relative',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        bgcolor: 'transparent',
+        color: isDark ? '#EAF1FF' : 'text.primary',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          background: isDark
+            ? 'radial-gradient(circle at 16% 8%, rgba(100,180,255,0.14), transparent 30%), radial-gradient(circle at 88% 22%, rgba(123,226,196,0.12), transparent 24%)'
+            : 'radial-gradient(circle at 16% 8%, rgba(34,154,104,0.12), transparent 30%), radial-gradient(circle at 88% 22%, rgba(77,124,254,0.10), transparent 24%)',
+        },
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          background: isDark
+            ? 'linear-gradient(180deg, rgba(8,17,29,0.22) 0%, rgba(8,17,29,0.04) 28%, rgba(8,17,29,0.26) 100%)'
+            : 'linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.06) 28%, rgba(240,246,242,0.3) 100%)',
+        },
+      }}
       onPointerDown={handleRootPointerDown}
       onPointerMove={handleRootPointerMove}
       onPointerUp={resetRootSwipe}
       onPointerCancel={resetRootSwipe}
       onPointerLeave={resetRootSwipe}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 'max(env(safe-area-inset-left), 8px)', pr: 'max(env(safe-area-inset-right), 8px)', pt: 'max(env(safe-area-inset-top), 12px)', pb: 1, borderBottom: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'divider', bgcolor: isDark ? 'rgba(20,33,52,0.88)' : '#FFFFFF' }}>
+      <Box sx={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 1, pl: 'max(env(safe-area-inset-left), 8px)', pr: 'max(env(safe-area-inset-right), 8px)', pt: 'max(env(safe-area-inset-top), 12px)', pb: 1, borderBottom: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(21,53,40,0.08)', bgcolor: isDark ? 'rgba(20,33,52,0.72)' : 'rgba(255,255,255,0.7)', backdropFilter: 'blur(16px)' }}>
         <IconButton onClick={() => navigate('/chats')} sx={{ color: isDark ? '#AFC1D9' : '#6F7D8A' }}><ArrowBackIcon /></IconButton>
 
         <ButtonBase
@@ -2530,7 +2586,17 @@ export default function ChatPage() {
       <Box
         ref={messageListRef}
         onScroll={handleMessageListScroll}
-        sx={{ flex: 1, overflow: 'auto', p: 1.2, bgcolor: isDark ? '#0A1A32' : '#FFFFFF' }}
+        sx={{
+          position: 'relative',
+          zIndex: 1,
+          flex: 1,
+          overflow: 'auto',
+          p: 1.2,
+          bgcolor: 'transparent',
+          backgroundImage: isDark
+            ? 'radial-gradient(circle at 18% 0%, rgba(100,180,255,0.06), transparent 24%), radial-gradient(circle at 82% 12%, rgba(123,226,196,0.05), transparent 18%)'
+            : 'radial-gradient(circle at 18% 0%, rgba(34,154,104,0.06), transparent 24%), radial-gradient(circle at 82% 12%, rgba(77,124,254,0.04), transparent 18%)',
+        }}
       >
         {isLoadingMessages && chatMessages.length === 0 ? (
           <Box sx={{ display: 'grid', placeItems: 'center', py: 6 }}><CircularProgress /></Box>
@@ -2539,7 +2605,7 @@ export default function ChatPage() {
             if (row.type === 'date') {
               return (
                 <Box key={row.key} sx={{ display: 'flex', justifyContent: 'center', my: 1.2 }}>
-                  <Box sx={{ px: 1.2, py: 0.4, borderRadius: 99, bgcolor: isDark ? 'rgba(255,255,255,0.11)' : '#E8EDF2' }}>
+                  <Box sx={{ px: 1.2, py: 0.4, borderRadius: 99, bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(232,237,242,0.8)', backdropFilter: 'blur(8px)' }}>
                     <Typography variant="caption" sx={{ fontWeight: 600, color: isDark ? '#D0DCEE' : '#6A7785' }}>{row.label}</Typography>
                   </Box>
                 </Box>
@@ -2638,9 +2704,19 @@ export default function ChatPage() {
                       sx={{
                         px: 1.5,
                         py: 0.95,
-                        borderRadius: 2.8,
+                        borderRadius: 2.2,
                         maxWidth: '100%',
-                        bgcolor: isMine ? (isDark ? '#2F5888' : '#D8F2E4') : (isDark ? '#152741' : '#F2F5F8'),
+                        border: '1px solid',
+                        borderColor: isMine
+                          ? alpha(isDark ? '#8FC7FF' : '#1FA35B', isDark ? 0.18 : 0.16)
+                          : alpha(isDark ? '#D8E7FF' : '#153528', isDark ? 0.1 : 0.08),
+                        bgcolor: isMine
+                          ? (isDark ? 'rgba(47,88,136,0.74)' : 'rgba(216,242,228,0.78)')
+                          : (isDark ? 'rgba(21,39,65,0.68)' : 'rgba(242,245,248,0.74)'),
+                        boxShadow: isMine
+                          ? (isDark ? '0 10px 24px rgba(10,22,39,0.18)' : '0 10px 20px rgba(31,163,91,0.08)')
+                          : 'none',
+                        backdropFilter: 'blur(12px)',
                         WebkitTouchCallout: 'none',
                         WebkitUserSelect: 'none',
                         userSelect: 'none',
@@ -2990,7 +3066,8 @@ export default function ChatPage() {
             display: 'flex',
             alignItems: 'center',
             gap: 0.8,
-            bgcolor: isDark ? 'rgba(16,29,46,0.95)' : '#FAFBFC',
+            bgcolor: isDark ? 'rgba(16,29,46,0.82)' : 'rgba(250,251,252,0.78)',
+            backdropFilter: 'blur(14px)',
           }}
         >
           <Box
@@ -3037,7 +3114,8 @@ export default function ChatPage() {
             display: 'flex',
             alignItems: 'center',
             gap: 0.8,
-            bgcolor: isDark ? 'rgba(16,29,46,0.95)' : '#FAFBFC',
+            bgcolor: isDark ? 'rgba(16,29,46,0.82)' : 'rgba(250,251,252,0.78)',
+            backdropFilter: 'blur(14px)',
           }}
         >
           <Typography variant="caption" sx={{ fontWeight: 700, flex: 1 }}>
@@ -3057,7 +3135,8 @@ export default function ChatPage() {
           sx: {
             borderTopLeftRadius: 16,
             borderTopRightRadius: 16,
-            bgcolor: isDark ? '#0E1C2E' : '#FFFFFF',
+            bgcolor: isDark ? 'rgba(14,28,46,0.84)' : 'rgba(255,255,255,0.84)',
+            backdropFilter: 'blur(18px)',
             pb: 'max(env(safe-area-inset-bottom), 10px)',
           },
         }}
@@ -3125,10 +3204,11 @@ export default function ChatPage() {
               maxHeight: 240,
               overflowY: 'auto',
               overscrollBehavior: 'contain',
-              borderRadius: 2,
+              borderRadius: 1.8,
               border: '1px solid',
               borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
               p: 0.65,
+              bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.46)',
             }}
           >
             {deviceGalleryLoading ? (
@@ -3167,11 +3247,19 @@ export default function ChatPage() {
                   ))}
                 </Box>
               </Stack>
-            ) : preferSystemGalleryPicker ? (
+            ) : deviceGalleryError ? (
               <Stack spacing={1} sx={{ py: 1.2, alignItems: 'center', textAlign: 'center' }}>
                 <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 320 }}>
                   Встроенная галерея сейчас не ответила, поэтому можно открыть системную галерею как запасной вариант.
                 </Typography>
+                <Button
+                  size="small"
+                  variant="contained"
+                  disabled={mediaPickerBusy || deviceGalleryLoading}
+                  onClick={() => void loadDeviceGallery()}
+                >
+                  Повторить встроенную
+                </Button>
                 <Button
                   size="small"
                   variant="outlined"
@@ -3229,7 +3317,8 @@ export default function ChatPage() {
               borderRadius: 2.5,
               p: 0.8,
               maxWidth: 270,
-              bgcolor: isDark ? '#102033' : '#FFFFFF',
+              bgcolor: isDark ? 'rgba(16,32,51,0.84)' : 'rgba(255,255,255,0.84)',
+              backdropFilter: 'blur(16px)',
               border: '1px solid',
               borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)',
             },
@@ -3259,7 +3348,7 @@ export default function ChatPage() {
         </Box>
       </Popover>
 
-      <Box sx={{ px: 1, pt: 1, pb: 'max(env(safe-area-inset-bottom), 8px)', display: 'flex', gap: 1, alignItems: 'center', bgcolor: isDark ? 'rgba(14,29,47,0.95)' : '#FFFFFF', borderTop: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'divider' }}>
+      <Box sx={{ position: 'relative', zIndex: 1, px: 1, pt: 1, pb: 'max(env(safe-area-inset-bottom), 8px)', display: 'flex', gap: 1, alignItems: 'center', bgcolor: isDark ? 'rgba(14,29,47,0.78)' : 'rgba(255,255,255,0.74)', borderTop: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(21,53,40,0.08)', backdropFilter: 'blur(16px)' }}>
         <input
           ref={inputRef}
           type="file"
@@ -3313,8 +3402,8 @@ export default function ChatPage() {
           placeholder={editingMessage ? 'Изменить сообщение...' : 'Сообщение...'}
           sx={{
             '& .MuiOutlinedInput-root': {
-              borderRadius: 99,
-              bgcolor: isDark ? 'rgba(255,255,255,0.08)' : '#F3F5F7',
+              borderRadius: 3.2,
+              bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(243,245,247,0.82)',
               color: isDark ? '#fff' : '#1D2A22',
             },
             '& .MuiInputBase-inputMultiline': {

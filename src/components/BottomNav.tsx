@@ -35,15 +35,15 @@ export function BottomNav() {
         left: 'max(env(safe-area-inset-left), 16px)',
         right: 'max(env(safe-area-inset-right), 16px)',
         bottom: 'max(env(safe-area-inset-bottom), 14px)',
-        borderRadius: 999,
+        borderRadius: 30,
         overflow: 'hidden',
         border: '1px solid',
         borderColor: alpha(isDark ? '#D8E7FF' : '#153528', isDark ? 0.12 : 0.08),
-        backdropFilter: 'blur(18px)',
-        bgcolor: isDark ? 'rgba(16,28,43,0.82)' : 'rgba(255,255,255,0.82)',
+        backdropFilter: 'blur(16px)',
+        bgcolor: isDark ? 'rgba(16,28,43,0.76)' : 'rgba(255,255,255,0.78)',
         boxShadow: isDark
-          ? '0 18px 44px rgba(0,0,0,0.32)'
-          : '0 18px 44px rgba(20,70,50,0.14)',
+          ? '0 16px 38px rgba(0,0,0,0.28)'
+          : '0 16px 34px rgba(20,70,50,0.12)',
       }}
     >
       <BottomNavigation
@@ -51,13 +51,13 @@ export function BottomNav() {
         onChange={(_, v) => navigate(tabs[v].path)}
         showLabels
         sx={{
-          height: 78,
+          height: 74,
           px: 0.7,
           '& .MuiBottomNavigationAction-root': {
             color: isDark ? '#95A2B3' : '#7AA08B',
             minWidth: 64,
             mx: 0.18,
-            my: 0.7,
+            my: 0.55,
             transition: 'transform 0.16s ease, background-color 0.16s ease, color 0.16s ease',
           },
           '& .MuiBottomNavigationAction-label': {
