@@ -14,6 +14,7 @@ DENSITIES = {
 }
 FILENAMES = ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png")
 SUPERSAMPLE = 4
+ICON_PADDING_RATIO = 0.02
 
 
 def clamp(value: float) -> int:
@@ -32,17 +33,17 @@ def make_bubble_mask(size: int) -> Image.Image:
     mask = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(mask)
     bubble_box = (
-        int(size * 0.12),
         int(size * 0.10),
-        int(size * 0.88),
-        int(size * 0.84),
+        int(size * 0.08),
+        int(size * 0.90),
+        int(size * 0.85),
     )
     tail = [
-        (int(size * 0.35), int(size * 0.74)),
-        (int(size * 0.28), int(size * 0.92)),
-        (int(size * 0.45), int(size * 0.83)),
+        (int(size * 0.35), int(size * 0.75)),
+        (int(size * 0.27), int(size * 0.95)),
+        (int(size * 0.46), int(size * 0.84)),
     ]
-    draw.rounded_rectangle(bubble_box, radius=int(size * 0.30), fill=255)
+    draw.rounded_rectangle(bubble_box, radius=int(size * 0.305), fill=255)
     draw.polygon(tail, fill=255)
     draw.ellipse(
         (
@@ -116,16 +117,16 @@ def add_moon(canvas: Image.Image, size: int) -> None:
     moon_mask = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(moon_mask)
     outer = (
-        int(size * 0.385),
-        int(size * 0.295),
-        int(size * 0.605),
-        int(size * 0.605),
+        int(size * 0.375),
+        int(size * 0.285),
+        int(size * 0.615),
+        int(size * 0.615),
     )
     inner = (
-        int(size * 0.47),
-        int(size * 0.275),
-        int(size * 0.69),
-        int(size * 0.605),
+        int(size * 0.465),
+        int(size * 0.255),
+        int(size * 0.70),
+        int(size * 0.615),
     )
     draw.ellipse(outer, fill=255)
     draw.ellipse(inner, fill=0)
@@ -133,6 +134,28 @@ def add_moon(canvas: Image.Image, size: int) -> None:
     moon = Image.new("RGBA", (size, size), (255, 255, 255, 0))
     moon.putalpha(moon_mask)
     canvas.alpha_composite(moon)
+
+
+def fit_icon_to_canvas(image: Image.Image, size: int) -> Image.Image:
+    alpha = image.getchannel("A")
+    bbox = alpha.getbbox()
+    if not bbox:
+      return image
+
+    cropped = image.crop(bbox)
+    inner_size = max(1, round(size * (1 - ICON_PADDING_RATIO * 2)))
+    scale = min(inner_size / cropped.width, inner_size / cropped.height)
+    resized = cropped.resize(
+        (
+            max(1, round(cropped.width * scale)),
+            max(1, round(cropped.height * scale)),
+        ),
+        Image.Resampling.LANCZOS,
+    )
+    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    offset = ((size - resized.width) // 2, (size - resized.height) // 2)
+    result.alpha_composite(resized, offset)
+    return result
 
 
 def make_icon(size: int) -> Image.Image:
@@ -144,6 +167,7 @@ def make_icon(size: int) -> Image.Image:
     canvas.paste(bubble, (0, 0), mask)
     add_shape_highlights(canvas, mask, hi_size)
     add_moon(canvas, hi_size)
+    canvas = fit_icon_to_canvas(canvas, hi_size)
 
     return canvas.resize((size, size), Image.Resampling.LANCZOS)
 
