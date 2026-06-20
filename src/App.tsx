@@ -896,7 +896,7 @@ export default function App() {
 
   if (auth.banned) {
     return (
-      <Box sx={{ height: '100dvh', display: 'grid', placeItems: 'center', p: 3, textAlign: 'center' }}>
+      <Box sx={{ height: 'var(--app-height, 100dvh)', display: 'grid', placeItems: 'center', p: 3, textAlign: 'center' }}>
         <Box>
           <Typography variant="h5" sx={{ mb: 1 }}>Аккаунт заблокирован</Typography>
           <Typography color="text.secondary">{auth.banReason || 'Свяжитесь с администратором.'}</Typography>
@@ -910,7 +910,7 @@ export default function App() {
       sx={{
         position: 'relative',
         isolation: 'isolate',
-        height: '100dvh',
+        height: 'var(--app-height, 100dvh)',
         pb: isChatRoute || isSupportRoute || isGameRoute ? 0 : 10,
         overflow: 'hidden',
         backgroundColor: 'background.default',

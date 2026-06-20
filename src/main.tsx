@@ -30,15 +30,15 @@ function Root() {
   );
 }
 
-const viewport = window.visualViewport;
-if (viewport) {
-  const updateHeight = () => {
-    document.documentElement.style.setProperty('--app-height', `${viewport.height}px`);
-  };
-  viewport.addEventListener('resize', updateHeight);
-  viewport.addEventListener('scroll', updateHeight);
-  updateHeight();
-}
+const updateHeight = () => {
+  const nextHeight = window.visualViewport?.height ?? window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', `${nextHeight}px`);
+};
+
+window.visualViewport?.addEventListener('resize', updateHeight);
+window.visualViewport?.addEventListener('scroll', updateHeight);
+window.addEventListener('resize', updateHeight);
+updateHeight();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
