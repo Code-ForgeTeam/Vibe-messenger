@@ -32,11 +32,25 @@ const copyIcons = async () => {
   }
 };
 
+const applyAdaptiveForeground = async () => {
+  const drawablePath = path.join(targetBase, 'drawable', 'ic_launcher_foreground.xml');
+  const drawableV24Path = path.join(targetBase, 'drawable-v24', 'ic_launcher_foreground.xml');
+  const content = `<?xml version="1.0" encoding="utf-8"?>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:gravity="center"
+    android:src="@mipmap/ic_launcher_foreground" />
+`;
+  await fs.mkdir(path.dirname(drawablePath), { recursive: true });
+  await fs.mkdir(path.dirname(drawableV24Path), { recursive: true });
+  await fs.writeFile(drawablePath, content, 'utf8');
+  await fs.writeFile(drawableV24Path, content, 'utf8');
+};
+
 const applyBackgroundColor = async () => {
   const valuesPath = path.join(targetBase, 'values', 'ic_launcher_background.xml');
   const content = `<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0F1624</color>
+    <color name="ic_launcher_background">#101B47</color>
 </resources>
 `;
   await fs.mkdir(path.dirname(valuesPath), { recursive: true });
@@ -68,13 +82,15 @@ const patchAdaptiveIconXml = async () => {
   const anydpiPath = path.join(targetBase, 'mipmap-anydpi-v26');
   const iconXml = path.join(anydpiPath, 'ic_launcher.xml');
   const roundIconXml = path.join(anydpiPath, 'ic_launcher_round.xml');
-  for (const filePath of [iconXml, roundIconXml]) {
-    try {
-      await fs.unlink(filePath);
-    } catch {
-      // file can be absent after fresh generation
-    }
-  }
+  const content = `<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
+`;
+  await fs.mkdir(anydpiPath, { recursive: true });
+  await fs.writeFile(iconXml, content, 'utf8');
+  await fs.writeFile(roundIconXml, content, 'utf8');
 };
 
 const patchManifestDefaults = async () => {
@@ -159,6 +175,7 @@ const main = async () => {
   }
 
   await copyIcons();
+  await applyAdaptiveForeground();
   await applyBackgroundColor();
   await patchAdaptiveIconXml();
   await applyNotificationIcon();
