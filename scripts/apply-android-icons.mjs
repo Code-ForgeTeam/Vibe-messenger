@@ -82,16 +82,40 @@ const patchManifestDefaults = async () => {
   let manifest = await fs.readFile(manifestPath, 'utf8');
   let changed = false;
 
-  if (manifest.includes('android:icon="@mipmap/ic_launcher"')) {
-    manifest = manifest.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@mipmap/ic_launcher_round"');
+  if (manifest.includes('android:icon="@mipmap/ic_launcher_round"')) {
+    manifest = manifest.replace('android:icon="@mipmap/ic_launcher_round"', 'android:icon="@mipmap/ic_launcher"');
     changed = true;
   }
-  if (!manifest.includes('android:roundIcon="@mipmap/ic_launcher_round"')) {
+  if (manifest.includes('android:roundIcon="@mipmap/ic_launcher_round"')) {
+    manifest = manifest.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@mipmap/ic_launcher"');
+    changed = true;
+  }
+  if (!manifest.includes('android:roundIcon="@mipmap/ic_launcher"')) {
     manifest = manifest.replace(
       /(<application[^>]*android:icon="[^"]+"[^>]*)(>)/,
-      '$1 android:roundIcon="@mipmap/ic_launcher_round"$2',
+      '$1 android:roundIcon="@mipmap/ic_launcher"$2',
     );
     changed = true;
+  }
+
+  if (manifest.includes('android:windowSoftInputMode=')) {
+    const next = manifest.replace(
+      /(<activity\b[^>]*android:name="\.MainActivity"[\s\S]*?)android:windowSoftInputMode="[^"]*"/,
+      '$1android:windowSoftInputMode="adjustResize"',
+    );
+    if (next !== manifest) {
+      manifest = next;
+      changed = true;
+    }
+  } else {
+    const next = manifest.replace(
+      /(<activity\b[^>]*android:name="\.MainActivity"[^>]*android:exported="true")/m,
+      '$1 android:windowSoftInputMode="adjustResize"',
+    );
+    if (next !== manifest) {
+      manifest = next;
+      changed = true;
+    }
   }
 
   if (!manifest.includes('com.google.firebase.messaging.default_notification_icon')) {

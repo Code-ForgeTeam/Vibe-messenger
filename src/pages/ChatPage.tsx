@@ -272,6 +272,7 @@ export default function ChatPage() {
   const messageInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
   const galleryListRef = useRef<HTMLDivElement | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const lastRenderedMessageIdRef = useRef<string>('');
@@ -298,6 +299,18 @@ export default function ChatPage() {
 
   const noteComposerActivity = useCallback(() => {
     composerPauseUntilRef.current = Date.now() + COMPOSER_POLL_PAUSE_MS;
+  }, []);
+
+  const keepHeaderVisible = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.scrollTo(0, 0);
+    window.requestAnimationFrame(() => {
+      headerRef.current?.scrollIntoView({ block: 'start' });
+      const list = messageListRef.current;
+      if (list) {
+        list.scrollTop = list.scrollHeight;
+      }
+    });
   }, []);
 
   const setDraftText = useCallback(
@@ -407,6 +420,26 @@ export default function ChatPage() {
     }, 5000);
     return () => window.clearInterval(timerId);
   }, [chatId, loadMessages]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+
+    const syncKeyboardViewport = () => {
+      const keyboardLikelyOpen = window.innerHeight - viewport.height > 120;
+      if (keyboardLikelyOpen) {
+        keepHeaderVisible();
+      }
+    };
+
+    viewport.addEventListener('resize', syncKeyboardViewport);
+    viewport.addEventListener('scroll', syncKeyboardViewport);
+    return () => {
+      viewport.removeEventListener('resize', syncKeyboardViewport);
+      viewport.removeEventListener('scroll', syncKeyboardViewport);
+    };
+  }, [keepHeaderVisible]);
 
   useEffect(() => {
     lastRenderedMessageIdRef.current = '';
@@ -2264,7 +2297,7 @@ export default function ChatPage() {
       onPointerCancel={resetRootSwipe}
       onPointerLeave={resetRootSwipe}
     >
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 3, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1, pl: 'max(env(safe-area-inset-left), 8px)', pr: 'max(env(safe-area-inset-right), 8px)', pt: 'max(env(safe-area-inset-top), 12px)', pb: 1, borderBottom: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(21,53,40,0.08)', bgcolor: isDark ? 'rgba(20,33,52,0.72)' : 'rgba(255,255,255,0.7)', backdropFilter: 'blur(16px)' }}>
+      <Box ref={headerRef} sx={{ position: 'sticky', top: 0, zIndex: 5, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1, pl: 'max(env(safe-area-inset-left), 8px)', pr: 'max(env(safe-area-inset-right), 8px)', pt: 'max(env(safe-area-inset-top), 12px)', pb: 1, borderBottom: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(21,53,40,0.08)', bgcolor: isDark ? 'rgba(20,33,52,0.78)' : 'rgba(255,255,255,0.78)', backdropFilter: 'blur(16px)' }}>
         <IconButton onClick={() => navigate('/chats')} sx={{ color: isDark ? '#AFC1D9' : '#6F7D8A' }}><ArrowBackIcon /></IconButton>
 
         <ButtonBase
@@ -2486,10 +2519,12 @@ export default function ChatPage() {
             onClick={() => setPreviewAttachment(null)}
             sx={{
               position: 'absolute',
-              top: 8,
-              right: 8,
+              top: 'calc(max(env(safe-area-inset-top), 12px) + 10px)',
+              right: 'calc(max(env(safe-area-inset-right), 12px) + 10px)',
               color: '#fff',
               bgcolor: 'rgba(0,0,0,0.45)',
+              width: 42,
+              height: 42,
               '&:hover': { bgcolor: 'rgba(0,0,0,0.62)' },
             }}
           >
@@ -3393,7 +3428,7 @@ export default function ChatPage() {
         </Box>
       </Popover>
 
-      <Box sx={{ position: 'relative', zIndex: 1, px: 1, pt: 1, pb: 'max(env(safe-area-inset-bottom), 8px)', display: 'flex', gap: 1, alignItems: 'center', bgcolor: isDark ? 'rgba(14,29,47,0.78)' : 'rgba(255,255,255,0.74)', borderTop: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(21,53,40,0.08)', backdropFilter: 'blur(16px)' }}>
+      <Box sx={{ position: 'relative', zIndex: 2, flexShrink: 0, px: 1, pt: 1, pb: 'max(env(safe-area-inset-bottom), 8px)', display: 'flex', gap: 1, alignItems: 'center', bgcolor: isDark ? 'rgba(14,29,47,0.78)' : 'rgba(255,255,255,0.74)', borderTop: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(21,53,40,0.08)', backdropFilter: 'blur(16px)' }}>
         <input
           ref={inputRef}
           type="file"
@@ -3442,7 +3477,10 @@ export default function ChatPage() {
           maxRows={4}
           defaultValue=""
           onChange={handleDraftChange}
-          onFocus={noteComposerActivity}
+          onFocus={() => {
+            noteComposerActivity();
+            keepHeaderVisible();
+          }}
           inputRef={messageInputRef}
           placeholder={editingMessage ? 'Изменить сообщение...' : 'Сообщение...'}
           sx={{

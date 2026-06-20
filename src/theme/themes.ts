@@ -72,11 +72,14 @@ const buildTheme = ({
             height: '100%',
           },
           body: {
+            height: '100%',
             minHeight: '100%',
             background: bodyBackground,
             backgroundAttachment: 'fixed',
+            overflow: 'hidden',
           },
           '#root': {
+            height: '100%',
             minHeight: '100%',
           },
           '*': {
