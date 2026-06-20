@@ -37,7 +37,7 @@ const applyAdaptiveForeground = async () => {
   const drawableV24Path = path.join(targetBase, 'drawable-v24', 'ic_launcher_foreground.xml');
   const content = `<?xml version="1.0" encoding="utf-8"?>
 <bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:gravity="fill"
+    android:gravity="center"
     android:src="@mipmap/ic_launcher_foreground" />
 `;
   await fs.mkdir(path.dirname(drawablePath), { recursive: true });

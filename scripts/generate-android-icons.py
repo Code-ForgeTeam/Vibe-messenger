@@ -5,14 +5,20 @@ from PIL import Image, ImageChops, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "assets" / "android-icons"
-DENSITIES = {
+LEGACY_SIZES = {
     "mipmap-mdpi": 48,
     "mipmap-hdpi": 72,
     "mipmap-xhdpi": 96,
     "mipmap-xxhdpi": 144,
     "mipmap-xxxhdpi": 192,
 }
-FILENAMES = ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png")
+ADAPTIVE_FOREGROUND_SIZES = {
+    "mipmap-mdpi": 108,
+    "mipmap-hdpi": 162,
+    "mipmap-xhdpi": 216,
+    "mipmap-xxhdpi": 324,
+    "mipmap-xxxhdpi": 432,
+}
 SUPERSAMPLE = 4
 
 
@@ -135,7 +141,30 @@ def add_moon(canvas: Image.Image, size: int) -> None:
     canvas.alpha_composite(moon)
 
 
-def make_icon(size: int) -> Image.Image:
+def fit_icon_to_canvas(image: Image.Image, size: int, padding_ratio: float) -> Image.Image:
+    alpha = image.getchannel("A")
+    bbox = alpha.getbbox()
+    if not bbox:
+        return image
+
+    cropped = image.crop(bbox)
+    target_width = max(1, round(size * (1 - padding_ratio * 2)))
+    target_height = max(1, round(size * (1 - padding_ratio * 2)))
+    scale = min(target_width / cropped.width, target_height / cropped.height)
+    resized = cropped.resize(
+        (
+            max(1, round(cropped.width * scale)),
+            max(1, round(cropped.height * scale)),
+        ),
+        Image.Resampling.LANCZOS,
+    )
+    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    offset = ((size - resized.width) // 2, (size - resized.height) // 2)
+    result.alpha_composite(resized, offset)
+    return result
+
+
+def make_icon(size: int, padding_ratio: float) -> Image.Image:
     hi_size = size * SUPERSAMPLE
     canvas = Image.new("RGBA", (hi_size, hi_size), (0, 0, 0, 0))
     mask = make_bubble_mask(hi_size)
@@ -144,17 +173,24 @@ def make_icon(size: int) -> Image.Image:
     canvas.paste(bubble, (0, 0), mask)
     add_shape_highlights(canvas, mask, hi_size)
     add_moon(canvas, hi_size)
+    canvas = fit_icon_to_canvas(canvas, hi_size, padding_ratio)
 
     return canvas.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def main() -> None:
-    for density, size in DENSITIES.items():
+    for density, size in LEGACY_SIZES.items():
         folder = TARGET / density
         folder.mkdir(parents=True, exist_ok=True)
-        icon = make_icon(size)
-        for filename in FILENAMES:
-            icon.save(folder / filename, format="PNG")
+        legacy_icon = make_icon(size, 0.02)
+        legacy_icon.save(folder / "ic_launcher.png", format="PNG")
+        legacy_icon.save(folder / "ic_launcher_round.png", format="PNG")
+
+    for density, size in ADAPTIVE_FOREGROUND_SIZES.items():
+        folder = TARGET / density
+        folder.mkdir(parents=True, exist_ok=True)
+        adaptive_icon = make_icon(size, 0.16)
+        adaptive_icon.save(folder / "ic_launcher_foreground.png", format="PNG")
     print("android launcher icons generated")
 
 
