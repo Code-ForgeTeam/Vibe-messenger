@@ -782,6 +782,7 @@ export default function ChatsPage() {
       <Paper
         sx={{
           p: 1,
+          pb: 0.85,
           borderRadius: 3,
           bgcolor: isDark ? 'rgba(16, 28, 43, 0.74)' : 'rgba(255,255,255,0.82)',
         }}
@@ -795,34 +796,23 @@ export default function ChatsPage() {
           InputProps={{ startAdornment: <SearchRoundedIcon sx={{ mr: 1, color: 'text.secondary' }} /> }}
           sx={{ '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
         />
-        <Box sx={{ mt: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'text.secondary' }}>
-            Чаты
-          </Typography>
-          <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-            {visible.length}
-          </Typography>
-        </Box>
-      </Paper>
-
-      <Paper
-        sx={{
-          mt: 1.1,
-          mb: 0.5,
-          p: 0.8,
-          borderRadius: 3,
-          bgcolor: isDark ? 'rgba(16, 28, 43, 0.72)' : 'rgba(255,255,255,0.82)',
-        }}
-      >
-        <Box sx={{ px: 0.45, pb: 0.55, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box
+          sx={{
+            mt: 1,
+            pt: 0.9,
+            borderTop: '1px solid',
+            borderColor: isDark ? 'rgba(216,231,255,0.08)' : 'rgba(21,53,40,0.08)',
+          }}
+        >
+          <Box sx={{ px: 0.45, pb: 0.55, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography sx={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.02em' }}>
             Статусы
           </Typography>
           <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
             24 часа
           </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1.1, overflowX: 'auto', pb: 0.2 }}>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1.1, overflowX: 'auto', pb: 0.2 }}>
           <ButtonBase
             onClick={() => {
               if (myStoryGroup?.items?.length) {
@@ -906,6 +896,7 @@ export default function ChatsPage() {
                 </Typography>
               </ButtonBase>
             ))}
+          </Box>
         </Box>
       </Paper>
 

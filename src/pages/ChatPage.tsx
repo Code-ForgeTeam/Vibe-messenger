@@ -690,7 +690,11 @@ export default function ChatPage() {
     galleryLoadInFlightRef.current = true;
     setDeviceGalleryLoading(true);
     try {
-      const { Capacitor } = await import('@capacitor/core');
+      const [{ Capacitor }, mediaModule, filesystemModule] = await Promise.all([
+        import('@capacitor/core'),
+        import('@capacitor-community/media'),
+        import('@capacitor/filesystem'),
+      ]);
       const platform = Capacitor.getPlatform();
       const isSamsung = platform === 'android' && isSamsungLikeDevice();
       const inlineGalleryLimit = getInlineGalleryLimit();
@@ -700,7 +704,6 @@ export default function ChatPage() {
         return;
       }
 
-      const mediaModule = await import('@capacitor-community/media');
       const { Media } = mediaModule;
       const normalizeFromMediaResult = (items: any[]): DeviceGalleryItem[] => {
         const next: DeviceGalleryItem[] = [];
@@ -736,40 +739,82 @@ export default function ChatPage() {
           .slice(0, inlineGalleryLimit);
       };
       if (platform === 'android') {
-        const attempts = isSamsung
-          ? [
-              { quantity: inlineGalleryLimit, thumbSize: inlineThumbSize, quality: 24 },
-              { quantity: Math.min(12, inlineGalleryLimit), thumbSize: 84, quality: 18 },
-            ]
-          : [{ quantity: inlineGalleryLimit, thumbSize: inlineThumbSize, quality: 46 }];
-        let fromMedia: DeviceGalleryItem[] = [];
-        let lastError: unknown = null;
+        try {
+          const mediaResult = await Media.getMedias({
+            quantity: isSamsung ? 260 : Math.max(120, inlineGalleryLimit),
+            thumbnailWidth: isSamsung ? 260 : inlineThumbSize,
+            thumbnailHeight: isSamsung ? 260 : inlineThumbSize,
+            thumbnailQuality: isSamsung ? 60 : 58,
+            types: 'photos',
+            sort: [{ key: 'creationDate', ascending: false }],
+          });
+          const fromMedia = normalizeFromMediaResult(Array.isArray(mediaResult?.medias) ? mediaResult.medias : []);
+          if (fromMedia.length > 0) {
+            setDeviceGalleryError('');
+            setDeviceGalleryFailureCount(0);
+            setDeviceGalleryItems(fromMedia);
+            setGalleryVisibleCount(getGalleryPageSize());
+            galleryLastLoadedAtRef.current = Date.now();
+            return;
+          }
+        } catch {
+          // fallback to filesystem scan below
+        }
 
-        for (const attempt of attempts) {
+        const { Filesystem } = filesystemModule;
+        const albums = await Media.getAlbums();
+        const albumPaths = (Array.isArray(albums?.albums) ? albums.albums : [])
+          .map((album) => normalizeNativePath(String(album?.identifier || '')))
+          .filter((value, index, arr) => value !== '' && arr.indexOf(value) === index)
+          .sort((a, b) => galleryPathPriority(a) - galleryPathPriority(b) || a.localeCompare(b))
+          .slice(0, 20);
+
+        const next: DeviceGalleryItem[] = [];
+        const seen = new Set<string>();
+        for (let albumIndex = 0; albumIndex < albumPaths.length; albumIndex += 1) {
+          if (next.length >= 260) break;
+          const albumPath = albumPaths[albumIndex];
           try {
-            const mediaResult = await Media.getMedias({
-              quantity: attempt.quantity,
-              thumbnailWidth: attempt.thumbSize,
-              thumbnailHeight: attempt.thumbSize,
-              thumbnailQuality: attempt.quality,
-              types: 'photos',
-              sort: [{ key: 'creationDate', ascending: false }],
-            });
-            fromMedia = normalizeFromMediaResult(Array.isArray(mediaResult?.medias) ? mediaResult.medias : []);
-            if (fromMedia.length > 0) break;
-            lastError = new Error('EMPTY_GALLERY_RESULT');
-          } catch (error) {
-            lastError = error;
+            const listed = await Filesystem.readdir({ path: albumPath });
+            const files = (Array.isArray(listed?.files) ? listed.files : [])
+              .filter((fileInfo) => String(fileInfo?.type || '') === 'file')
+              .filter((fileInfo) => IMAGE_FILE_RE.test(String(fileInfo?.name || '').trim()))
+              .sort((a, b) => Number(b?.mtime || 0) - Number(a?.mtime || 0))
+              .slice(0, 40);
+
+            for (const fileInfo of files) {
+              if (next.length >= 260) break;
+              const name = String(fileInfo?.name || '').trim();
+              if (!IMAGE_FILE_RE.test(name)) continue;
+              const uriRaw =
+                normalizeNativePath(String(fileInfo?.uri || '')) ||
+                normalizeNativePath(`${albumPath}/${name}`);
+              if (!uriRaw || seen.has(uriRaw)) continue;
+              seen.add(uriRaw);
+              const mtime = Number(fileInfo?.mtime || 0);
+              next.push({
+                identifier: uriRaw,
+                path: uriRaw,
+                previewUrl: Capacitor.convertFileSrc(uriRaw),
+                creationDate: Number.isFinite(mtime) && mtime > 0 ? new Date(mtime).toISOString() : undefined,
+              });
+            }
+
+            if (albumIndex > 0 && albumIndex % 2 === 0) {
+              await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+            }
+          } catch {
+            // skip unreadable album path and continue
           }
         }
 
-        if (!fromMedia.length) {
-          throw lastError ?? new Error('EMPTY_GALLERY_RESULT');
-        }
+        const sorted = next
+          .sort((a, b) => new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime())
+          .slice(0, Math.max(120, inlineGalleryLimit));
 
         setDeviceGalleryError('');
         setDeviceGalleryFailureCount(0);
-        setDeviceGalleryItems(fromMedia);
+        setDeviceGalleryItems(sorted);
         setGalleryVisibleCount(getGalleryPageSize());
         galleryLastLoadedAtRef.current = Date.now();
         return;
@@ -908,6 +953,14 @@ export default function ChatPage() {
   const handlePickFromGallery = async () => {
     setMediaPickerBusy(true);
     try {
+      const { Capacitor: quickCapacitor } = await import('@capacitor/core');
+      if (quickCapacitor.getPlatform() === 'web') {
+        galleryInputRef.current?.click();
+        return;
+      }
+      await loadDeviceGallery();
+      return;
+
       const [{ Capacitor }, cameraModule] = await Promise.all([
         import('@capacitor/core'),
         import('@capacitor/camera'),
