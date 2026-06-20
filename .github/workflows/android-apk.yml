@@ -73,7 +73,7 @@ jobs:
       - name: Add Android platform
         shell: bash
         run: |
-          if [ ! -d android/app ]; then
+          if [ ! -f android/gradlew ]; then
             npx cap add android
           fi
 
