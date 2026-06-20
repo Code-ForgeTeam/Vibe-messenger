@@ -32,18 +32,27 @@ def make_bubble_mask(size: int) -> Image.Image:
     mask = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(mask)
     bubble_box = (
-        int(size * 0.11),
-        int(size * 0.11),
-        int(size * 0.89),
-        int(size * 0.86),
+        int(size * 0.12),
+        int(size * 0.10),
+        int(size * 0.88),
+        int(size * 0.84),
     )
     tail = [
-        (int(size * 0.32), int(size * 0.74)),
-        (int(size * 0.26), int(size * 0.93)),
-        (int(size * 0.43), int(size * 0.84)),
+        (int(size * 0.35), int(size * 0.74)),
+        (int(size * 0.28), int(size * 0.92)),
+        (int(size * 0.45), int(size * 0.83)),
     ]
-    draw.rounded_rectangle(bubble_box, radius=int(size * 0.31), fill=255)
+    draw.rounded_rectangle(bubble_box, radius=int(size * 0.30), fill=255)
     draw.polygon(tail, fill=255)
+    draw.ellipse(
+        (
+            int(size * 0.29),
+            int(size * 0.70),
+            int(size * 0.47),
+            int(size * 0.84),
+        ),
+        fill=255,
+    )
     return mask
 
 
@@ -70,29 +79,30 @@ def make_gradient(size: int) -> Image.Image:
 def add_shape_highlights(canvas: Image.Image, mask: Image.Image, size: int) -> None:
     top_sheen = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(top_sheen)
-    draw.polygon(
+    draw.rounded_rectangle(
         [
-            (int(size * 0.16), int(size * 0.14)),
-            (int(size * 0.62), int(size * 0.16)),
-            (int(size * 0.49), int(size * 0.37)),
-            (int(size * 0.16), int(size * 0.33)),
+            int(size * 0.16),
+            int(size * 0.15),
+            int(size * 0.72),
+            int(size * 0.36),
         ],
+        radius=int(size * 0.14),
         fill=255,
     )
     top_sheen = ImageChops.multiply(top_sheen, mask)
     sheen = Image.new("RGBA", (size, size), (255, 255, 255, 0))
-    sheen.putalpha(top_sheen.point(lambda value: clamp(value * 0.16)))
+    sheen.putalpha(top_sheen.point(lambda value: clamp(value * 0.12)))
     canvas.alpha_composite(sheen)
 
     lower_depth = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(lower_depth)
     draw.polygon(
         [
-            (int(size * 0.47), int(size * 0.42)),
-            (int(size * 0.95), int(size * 0.47)),
-            (int(size * 0.89), int(size * 0.86)),
-            (int(size * 0.33), int(size * 0.88)),
-            (int(size * 0.43), int(size * 0.69)),
+            (int(size * 0.42), int(size * 0.39)),
+            (int(size * 0.94), int(size * 0.45)),
+            (int(size * 0.86), int(size * 0.84)),
+            (int(size * 0.32), int(size * 0.86)),
+            (int(size * 0.41), int(size * 0.69)),
         ],
         fill=255,
     )
@@ -106,16 +116,16 @@ def add_moon(canvas: Image.Image, size: int) -> None:
     moon_mask = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(moon_mask)
     outer = (
-        int(size * 0.38),
-        int(size * 0.30),
-        int(size * 0.59),
-        int(size * 0.59),
+        int(size * 0.385),
+        int(size * 0.295),
+        int(size * 0.605),
+        int(size * 0.605),
     )
     inner = (
-        int(size * 0.46),
-        int(size * 0.26),
+        int(size * 0.47),
+        int(size * 0.275),
         int(size * 0.69),
-        int(size * 0.59),
+        int(size * 0.605),
     )
     draw.ellipse(outer, fill=255)
     draw.ellipse(inner, fill=0)
