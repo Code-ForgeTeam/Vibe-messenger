@@ -94,8 +94,12 @@ jobs:
         run: echo "No Firebase secrets found. Building APK without Android FCM configuration."
 
       - name: Build installable debug APK
-        working-directory: android
-        run: ./gradlew :app:assembleDebug
+        shell: bash
+        run: |
+          test -f android/gradlew
+          chmod +x android/gradlew
+          cd android
+          ./gradlew :app:assembleDebug
 
       - name: Collect APK artifact
         shell: bash
