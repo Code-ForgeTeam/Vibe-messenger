@@ -74,6 +74,7 @@ jobs:
         shell: bash
         run: |
           if [ ! -f android/gradlew ]; then
+            rm -rf android
             npx cap add android
           fi
 
