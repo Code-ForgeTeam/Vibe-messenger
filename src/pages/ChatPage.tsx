@@ -840,11 +840,7 @@ export default function ChatPage() {
         setDeviceGalleryItems([]);
       }
       setDeviceGalleryFailureCount((prev) => prev + 1);
-      setDeviceGalleryError(
-        isSamsungLikeDevice()
-          ? 'Встроенная галерея не ответила с первого раза. Я оставил её включённой и можно сразу повторить попытку.'
-          : 'Не удалось загрузить встроенную галерею. Можно повторить попытку или открыть системную.'
-      );
+      setDeviceGalleryError('gallery_unavailable');
       if (!hadCachedItems) pushSnackbar({ message: 'Не удалось загрузить фото устройства', timeout: 2200, tone: 'error' });
     } finally {
       galleryLoadInFlightRef.current = false;
@@ -2237,6 +2233,7 @@ export default function ChatPage() {
       sx={{
         position: 'relative',
         height: '100%',
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -2267,7 +2264,7 @@ export default function ChatPage() {
       onPointerCancel={resetRootSwipe}
       onPointerLeave={resetRootSwipe}
     >
-      <Box sx={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 1, pl: 'max(env(safe-area-inset-left), 8px)', pr: 'max(env(safe-area-inset-right), 8px)', pt: 'max(env(safe-area-inset-top), 12px)', pb: 1, borderBottom: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(21,53,40,0.08)', bgcolor: isDark ? 'rgba(20,33,52,0.72)' : 'rgba(255,255,255,0.7)', backdropFilter: 'blur(16px)' }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 3, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1, pl: 'max(env(safe-area-inset-left), 8px)', pr: 'max(env(safe-area-inset-right), 8px)', pt: 'max(env(safe-area-inset-top), 12px)', pb: 1, borderBottom: '1px solid', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(21,53,40,0.08)', bgcolor: isDark ? 'rgba(20,33,52,0.72)' : 'rgba(255,255,255,0.7)', backdropFilter: 'blur(16px)' }}>
         <IconButton onClick={() => navigate('/chats')} sx={{ color: isDark ? '#AFC1D9' : '#6F7D8A' }}><ArrowBackIcon /></IconButton>
 
         <ButtonBase
@@ -2445,14 +2442,24 @@ export default function ChatPage() {
       <Dialog
         open={!!previewAttachment}
         onClose={() => setPreviewAttachment(null)}
-        fullWidth
-        maxWidth="md"
+        fullScreen
+        slotProps={{
+          paper: {
+            sx: {
+              bgcolor: '#000',
+              backgroundImage: 'none',
+              borderRadius: 0,
+              maxWidth: '100vw',
+              maxHeight: '100dvh',
+            },
+          },
+        }}
       >
         <Box
           sx={{
             bgcolor: '#000',
-            minHeight: 240,
-            maxHeight: '85dvh',
+            width: '100vw',
+            height: '100dvh',
             display: 'grid',
             placeItems: 'center',
             position: 'relative',
@@ -2465,14 +2472,14 @@ export default function ChatPage() {
               controls
               autoPlay
               playsInline
-              sx={{ width: '100%', maxHeight: '85dvh', bgcolor: '#000' }}
+              sx={{ width: '100%', height: '100%', objectFit: 'contain', bgcolor: '#000' }}
             />
           ) : (
             <Box
               component="img"
               src={String(previewAttachment?.url || '')}
               alt={previewAttachment?.name || 'photo'}
-              sx={{ width: '100%', maxHeight: '85dvh', objectFit: 'contain' }}
+              sx={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           )}
           <IconButton
@@ -2643,6 +2650,7 @@ export default function ChatPage() {
           position: 'relative',
           zIndex: 1,
           flex: 1,
+          minHeight: 0,
           overflow: 'auto',
           p: 1.2,
           bgcolor: 'transparent',
@@ -3270,11 +3278,6 @@ export default function ChatPage() {
               </Box>
             ) : deviceGalleryItems.length > 0 ? (
               <Stack spacing={0.85}>
-                {isSamsungLikeDevice() ? (
-                  <Typography variant="caption" color="text.secondary" sx={{ px: 0.25 }}>
-                    На Samsung галерея открыта во встроенном облегчённом режиме, чтобы не зависала при прокрутке.
-                  </Typography>
-                ) : null}
                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.55 }}>
                   {visibleDeviceGalleryItems.map((item) => (
                     <ButtonBase
@@ -3302,17 +3305,6 @@ export default function ChatPage() {
               </Stack>
             ) : deviceGalleryError ? (
               <Stack spacing={1} sx={{ py: 1.2, alignItems: 'center', textAlign: 'center' }}>
-                <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 320 }}>
-                  Встроенная галерея сейчас не ответила, поэтому можно открыть системную галерею как запасной вариант.
-                </Typography>
-                <Button
-                  size="small"
-                  variant="contained"
-                  disabled={mediaPickerBusy || deviceGalleryLoading}
-                  onClick={() => void loadDeviceGallery()}
-                >
-                  Повторить встроенную
-                </Button>
                 <Button
                   size="small"
                   variant="outlined"
